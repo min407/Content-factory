@@ -135,7 +135,10 @@ export class DraftManager {
         topicId: article.topicId,
         createdAt: new Date(),
         updatedAt: new Date(),
-        status: 'draft'
+        status: 'draft',
+        wordCount: article.wordCount || 0,
+        readingTime: article.readingTime || 0,
+        parameters: article.parameters
       }
 
       // 保存到本地
@@ -159,6 +162,12 @@ export class DraftManager {
    */
   static getDrafts(): Draft[] {
     try {
+      // 检查是否在浏览器环境中
+      if (typeof window === 'undefined') {
+        console.warn('DraftManager.getDrafts(): 不在浏览器环境中，无法访问localStorage')
+        return []
+      }
+
       const data = localStorage.getItem('drafts')
       return data ? JSON.parse(data) : []
     } catch (error) {
@@ -172,6 +181,12 @@ export class DraftManager {
    */
   static getDraft(draftId: string): Draft | null {
     try {
+      // 检查是否在浏览器环境中
+      if (typeof window === 'undefined') {
+        console.warn('DraftManager.getDraft(): 不在浏览器环境中，无法访问localStorage')
+        return null
+      }
+
       const drafts = this.getDrafts()
       return drafts.find(draft => draft.id === draftId) || null
     } catch (error) {

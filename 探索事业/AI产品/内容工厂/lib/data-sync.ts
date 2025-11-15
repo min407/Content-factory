@@ -22,10 +22,46 @@ export function syncTopicsFromAnalysis(): TopicWithHistory[] {
   }
 
   try {
-    // 获取localStorage中的分析数据
+    // 优先获取用户选中的选题
+    const selectedTopicsData = localStorage.getItem('selected-topics')
+    if (selectedTopicsData) {
+      const selectedTopics = JSON.parse(selectedTopicsData)
+
+      // 转换为带历史信息的选题
+      let topics: TopicWithHistory[] = selectedTopics.map((topicData: any, index: number) => {
+        const insight = topicData.insight || topicData // 兼容直接保存洞察数据的情况
+
+        return {
+          id: insight.id || `selected-${generateId()}-${index}`,
+          title: insight.title,
+          description: insight.description,
+          confidence: insight.confidence,
+          tags: insight.tags || [],
+          keywords: insight.keywords || [],
+          createdAt: new Date(insight.timestamp || Date.now()),
+          source: 'selected-analysis',
+          sourceAnalysis: `selected-${insight.timestamp || Date.now()}`,
+          // 添加洞察特有字段 - 安全访问
+          decisionStage: insight.decisionStage,
+          audienceScene: insight.audienceScene,
+          demandPainPoint: insight.demandPainPoint,
+          customFields: insight.customFields || {}
+        }
+      })
+
+      // 只返回最近10个选题
+      topics = topics
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+        .slice(0, 10)
+
+      console.log(`从选中选题同步了 ${topics.length} 个选题（最多显示10个）`)
+      return topics
+    }
+
+    // 如果没有选中选题，则回退到所有洞察（保持兼容性）
     const analysisData = localStorage.getItem('ai-analysis-results')
     if (!analysisData) {
-      console.log('未找到分析数据')
+      console.log('未找到分析数据和选中选题')
       return []
     }
 
@@ -33,14 +69,19 @@ export function syncTopicsFromAnalysis(): TopicWithHistory[] {
     const insights = parsed.insights || []
 
     // 转换为带历史信息的选题
-    const topics: TopicWithHistory[] = insights.map((insight: TopicInsight, index: number) => ({
+    let topics: TopicWithHistory[] = insights.map((insight: TopicInsight, index: number) => ({
       ...insight,
       id: `topic-${generateId()}-${index}`,
       createdAt: new Date(parsed.analysisTime || Date.now()),
       sourceAnalysis: `analysis-${parsed.analysisTime || Date.now()}`
     }))
 
-    console.log(`同步了 ${topics.length} 个选题`)
+    // 只返回最近10个选题
+    topics = topics
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, 10)
+
+    console.log(`从所有洞察同步了 ${topics.length} 个选题（最多显示10个）`)
     return topics
   } catch (error) {
     console.error('同步选题数据失败:', error)
@@ -64,16 +105,19 @@ export function getLocalTopicHistory(): TopicWithHistory[] {
     const topics = JSON.parse(topicsData)
 
     // 修复日期反序列化问题
-    const processedTopics = topics.map((topic: any) => ({
+    let processedTopics = topics.map((topic: any) => ({
       ...topic,
       createdAt: new Date(topic.createdAt)
     }))
 
-    // 按时间倒序排列
-    return processedTopics
+    // 按时间倒序排列并只保留最近10个
+    processedTopics = processedTopics
       .sort((a: TopicWithHistory, b: TopicWithHistory) =>
         b.createdAt.getTime() - a.createdAt.getTime()
       )
+      .slice(0, 10)
+
+    return processedTopics
   } catch (error) {
     console.error('获取选题历史失败:', error)
     return []
@@ -99,12 +143,13 @@ export function saveTopicsToLocal(topics: TopicWithHistory[]): void {
       arr.findIndex(t => t.title === topic.title && t.description === topic.description) === index
     )
 
-    // 按时间倒序排列
+    // 按时间倒序排列并只保留最近10个
     const sortedTopics = uniqueTopics
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, 10)
 
     localStorage.setItem('topic-history', JSON.stringify(sortedTopics))
-    console.log(`保存了 ${sortedTopics.length} 个选题到历史记录`)
+    console.log(`保存了 ${sortedTopics.length} 个选题到历史记录（最多保留10个）`)
   } catch (error) {
     console.error('保存选题历史失败:', error)
   }
@@ -123,9 +168,10 @@ export function mergeTopicsWithHistory(): TopicWithHistory[] {
     arr.findIndex(t => t.title === topic.title && t.description === topic.description) === index
   )
 
-  // 按时间倒序排列
+  // 按时间倒序排列并只保留最近10个
   const sortedTopics = uniqueTopics
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    .slice(0, 10)
 
   // 保存合并后的数据
   saveTopicsToLocal(sortedTopics)
@@ -195,7 +241,7 @@ export function refreshTopicsData(): TopicWithHistory[] {
   // 强制更新同步时间戳
   localStorage.setItem('last-sync-time', Date.now().toString())
 
-  // 重新合并数据
+  // 重新合并数据（已包含限制10个的逻辑）
   const mergedTopics = mergeTopicsWithHistory()
 
   // 触发一个自定义事件来强制更新所有监听器
@@ -203,7 +249,7 @@ export function refreshTopicsData(): TopicWithHistory[] {
     detail: { topics: mergedTopics, timestamp: Date.now() }
   }))
 
-  console.log('手动刷新完成，返回', mergedTopics.length, '个选题')
+  console.log('手动刷新完成，返回', mergedTopics.length, '个选题（最多显示10个）')
   return mergedTopics
 }
 

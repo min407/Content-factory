@@ -26,27 +26,27 @@ export interface TopicInsight {
   confidence: number         // 置信度（60-100）
   evidence: string[]         // 证据（引用文章标题）
   tags: string[]            // 额外标签
-  keywords: {
-    primary: string[]        // 主要关键词
-    secondary: string[]      // 次要关键词
-    category: string         // 关键词分类
+  keywords?: {
+    primary?: string[]        // 主要关键词
+    secondary?: string[]      // 次要关键词
+    category?: string         // 关键词分类
   }
 
   // 三维度分析字段
-  decisionStage: {
+  decisionStage?: {
     stage: '觉察期' | '认知期' | '调研期' | '决策期' | '行动期' | '成果期'
-    reason: string           // 基于文章内容判断用户心理状态和行为阶段的理由
+    reason?: string           // 基于文章内容判断用户心理状态和行为阶段的理由
   }
-  audienceScene: {
-    audience: string         // 从文章内容分析出的具体人群特征
-    scene: string           // 与人群匹配的具体使用场景
-    reason: string          // 基于文章内容分析人群场景匹配度的理由
+  audienceScene?: {
+    audience?: string         // 从文章内容分析出的具体人群特征
+    scene?: string           // 与人群匹配的具体使用场景
+    reason?: string          // 基于文章内容分析人群场景匹配度的理由
   }
-  demandPainPoint: {
-    emotionalPain: string   // 用户的情绪痛点
-    realisticPain: string   // 用户的现实痛点
-    expectation: string     // 用户的期望需求
-    reason: string          // 基于文章内容分析用户产生问题根本原因的理由
+  demandPainPoint?: {
+    emotionalPain?: string   // 用户的情绪痛点
+    realisticPain?: string   // 用户的现实痛点
+    expectation?: string     // 用户的期望需求
+    reason?: string          // 基于文章内容分析用户产生问题根本原因的理由
   }
 
   // 其他分析字段
@@ -125,6 +125,9 @@ export interface CreationParams {
   uniqueAngle?: string
   imageStyle?: string // 新增：图片风格选择
   imageRatio?: string // 新增：图片比例选择
+  creationMode?: 'original' | 'reference' // 新增：创作模式
+  originalInspiration?: string // 新增：原创灵感
+  referenceArticles?: any[] // 新增：对标文章
 }
 
 // 文章历史记录
@@ -145,6 +148,17 @@ export interface Draft {
   createdAt: Date
   updatedAt: Date
   status: 'draft' | 'published' | 'archived'
+  wordCount?: number
+  readingTime?: number
+  parameters?: CreationParams
+  publishedAt?: Date
+  publishedTo?: {
+    platform: string
+    accountId: string
+    articleType: string
+    publicationId: string
+    mediaId: string
+  }
 }
 
 // 内容历史记录项

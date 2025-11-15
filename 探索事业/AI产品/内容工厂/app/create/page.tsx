@@ -30,7 +30,8 @@ import {
   Filter,
   X,
   Edit3,
-  Download
+  Download,
+  ChevronDown
 } from 'lucide-react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
@@ -139,6 +140,15 @@ export default function CreatePage() {
   // 封面相关状态
   const [showCoverPreview, setShowCoverPreview] = useState(false)
   const [regeneratingCover, setRegeneratingCover] = useState(false)
+
+  // 爆文选择相关状态
+  const [showArticleSelection, setShowArticleSelection] = useState(false)
+  const [relatedArticles, setRelatedArticles] = useState<any[]>([])
+  const [selectedArticles, setSelectedArticles] = useState<any[]>([])
+  const [loadingArticles, setLoadingArticles] = useState(false)
+  const [creationMode, setCreationMode] = useState<'original' | 'reference'>('original')
+  const [originalInspiration, setOriginalInspiration] = useState('')
+  const [expandedArticle, setExpandedArticle] = useState<string | null>(null)
 
   // 加载草稿 - 只在客户端执行
   useEffect(() => {
@@ -365,11 +375,267 @@ export default function CreatePage() {
   const handleTopicSelect = useCallback((topic: TopicWithHistory) => {
     setSelectedTopic(topic)
     setError(null)
+    // 清空之前的选择状态
+    setShowArticleSelection(false)
+    setSelectedArticles([])
+    setRelatedArticles([])
   }, [])
 
   // 清空选题选择
   const handleTopicClear = useCallback(() => {
     setSelectedTopic(null)
+    setShowArticleSelection(false)
+    setSelectedArticles([])
+    setRelatedArticles([])
+  }, [])
+
+  // 获取相关爆文
+  const fetchRelatedArticles = useCallback(async (topic: TopicWithHistory) => {
+    setLoadingArticles(true)
+    try {
+      // 直接从localStorage获取AI分析结果
+      const analysisResults = localStorage.getItem('ai-analysis-results')
+      if (analysisResults) {
+        const analysisData = JSON.parse(analysisResults)
+        console.log('完整分析数据结构:', {
+          summariesCount: analysisData.summaries?.length || 0,
+          insightsCount: analysisData.insights?.length || 0,
+          articlesCount: analysisData.articles?.length || 0,
+          hasStats: !!analysisData.stats,
+          analysisTime: new Date(analysisData.analysisTime || 0).toLocaleString()
+        })
+
+        console.log('当前选择的选题:', topic.title)
+        console.log('选题详情:', topic)
+
+        // 优先使用articles数据，如果没有则使用summaries
+        let articlesToSearch = analysisData.articles || []
+
+        // 如果没有articles，尝试从summaries转换
+        if (articlesToSearch.length === 0 && analysisData.summaries) {
+          articlesToSearch = analysisData.summaries.map((summary: any) => ({
+            title: summary.title,
+            summary: summary.summary || summary.description || '',
+            reads: summary.reads || summary.read || 0,
+            likes: summary.likes || summary.praise || 0,
+            url: summary.url || '',
+            content: summary.content || ''
+          }))
+          console.log('从summaries转换得到articles:', articlesToSearch.length)
+        }
+
+        // 标准化数据字段名，确保数据一致性
+        articlesToSearch = articlesToSearch.map((article: any) => ({
+          ...article,
+          reads: article.reads || article.read || 0,
+          likes: article.likes || article.praise || 0,
+          summary: article.summary || article.description || article.content || '',
+          engagementRate: article.engagementRate || (
+            article.read > 0 ? ((article.praise || article.likes || 0) / article.read * 100).toFixed(1) + '%' : '0%'
+          )
+        }))
+
+        console.log('用于搜索的文章总数:', articlesToSearch.length)
+
+        if (articlesToSearch.length === 0) {
+          console.warn('没有可用的文章数据进行搜索')
+          setRelatedArticles([])
+          return
+        }
+
+        // 分析选题标题，提取关键词
+        const topicKeywords = topic.title.toLowerCase()
+          .split(/[，。！？；：\s、]+/)
+          .filter(keyword => keyword.length > 1)
+          .flatMap(keyword => {
+            // 进一步分解长词汇为更小的关键词
+            return keyword.split(/[\s\-_:]+/).filter(k => k.length > 1)
+          })
+
+        // 添加一些同义词和相关词汇
+        const expandedKeywords = [...topicKeywords]
+
+        // 根据选题内容添加相关词汇
+        if (topic.title.includes('副业')) {
+          expandedKeywords.push('赚钱', '收入', '兼职', '创业', '项目')
+        }
+        if (topic.title.includes('职场') || topic.title.includes('新人')) {
+          expandedKeywords.push('工作', '职场', '新人', '初入职场', '小白')
+        }
+        if (topic.title.includes('选择') || topic.title.includes('指南')) {
+          expandedKeywords.push('指南', '教程', '方法', '技巧', '经验')
+        }
+
+        console.log('原始关键词:', topicKeywords)
+        console.log('扩展关键词:', expandedKeywords)
+
+        // 根据关键词匹配相关文章，增强匹配逻辑
+        const related = articlesToSearch.filter((article: any, index: number) => {
+          const articleTitle = (article.title || '').toLowerCase()
+          const articleSummary = (article.summary || article.description || '').toLowerCase()
+          const articleDigest = (article.digest || '').toLowerCase()
+          const articleContent = (article.content || '').toLowerCase()
+
+          // 组合文章文本进行匹配
+          const articleText = `${articleTitle} ${articleSummary} ${articleDigest} ${articleContent}`
+
+          // 检查是否包含扩展关键词
+          const hasKeywordMatch = expandedKeywords.some((keyword: string) => {
+            return articleText.includes(keyword)
+          })
+
+          // 如果选题有description，也进行匹配
+          const topicDesc = topic.description?.toLowerCase() || ''
+          const hasDescMatch = topicDesc.length > 0 &&
+            expandedKeywords.some((keyword: string) => {
+              return articleText.includes(keyword) || topicDesc.includes(keyword)
+            })
+
+          const isMatch = hasKeywordMatch || hasDescMatch
+
+          // 添加关键词匹配详情用于调试
+          const matchedKeywords = expandedKeywords.filter(keyword =>
+            articleText.includes(keyword)
+          )
+
+          if (index < 5) {
+            console.log(`文章 ${index + 1}: "${articleTitle}" - 匹配: ${isMatch}, 匹配关键词: [${matchedKeywords.join(', ')}]`)
+          }
+
+          return isMatch
+        }).map((article: any) => {
+          // 计算相关性分数
+          let score = 0
+          const articleTitle = (article.title || '').toLowerCase()
+          const articleSummary = (article.summary || article.description || '').toLowerCase()
+
+          expandedKeywords.forEach((keyword: string) => {
+            if (articleTitle.includes(keyword)) score += 3 // 标题匹配权重高
+            if (articleSummary.includes(keyword)) score += 2 // 摘要匹配权重中
+          })
+
+          return {
+            ...article,
+            relevanceScore: score
+          }
+        })
+        .sort((a: any, b: any) => b.relevanceScore - a.relevanceScore) // 按相关性排序
+        .slice(0, 8) // 限制最多8篇相关文章
+
+        console.log('筛选后的相关文章数量:', related.length)
+        console.log('相关文章详情:', related.map((a: any) => ({
+          title: a.title,
+          score: a.relevanceScore,
+          reads: a.reads || 0,
+          likes: a.likes || 0
+        })))
+
+        setRelatedArticles(related)
+
+        if (related.length === 0) {
+          console.warn('未找到相关文章，详细调试信息：')
+          console.warn('- 原始关键词:', topicKeywords)
+          console.warn('- 扩展关键词:', expandedKeywords)
+          console.warn('- 可搜索文章数:', articlesToSearch.length)
+          console.warn('- 前3篇文章标题:', articlesToSearch.slice(0, 3).map((a: any) => a.title))
+          console.warn('- 文章内容预览:', articlesToSearch.slice(0, 3).map((a: any) => ({
+            title: a.title,
+            summary: (a.summary || a.description || '').substring(0, 50) + '...'
+          })))
+        }
+      } else {
+        console.warn('未找到AI分析结果，请先进行选题分析')
+        setRelatedArticles([])
+
+        // 显示提示信息
+        alert('请先前往"选题分析"页面进行分析，然后再选择选题')
+      }
+    } catch (error) {
+      console.error('获取相关爆文失败:', error)
+      setRelatedArticles([])
+    } finally {
+      setLoadingArticles(false)
+    }
+  }, [])
+
+  // 切换爆文选择状态
+  const toggleArticleSelection = useCallback(() => {
+    if (!showArticleSelection && selectedTopic) {
+      fetchRelatedArticles(selectedTopic)
+    }
+    setShowArticleSelection(!showArticleSelection)
+  }, [showArticleSelection, selectedTopic, fetchRelatedArticles])
+
+  // 选择/取消选择爆文
+  const toggleArticleSelect = useCallback((article: any) => {
+    setSelectedArticles(prev => {
+      const isSelected = prev.some(a => a.title === article.title)
+      if (isSelected) {
+        return prev.filter(a => a.title !== article.title)
+      } else {
+        return [...prev, article]
+      }
+    })
+  }, [])
+
+  // 切换原文显示
+  const toggleArticleContent = useCallback((articleTitle: string) => {
+    setExpandedArticle(prev => prev === articleTitle ? null : articleTitle)
+  }, [])
+
+  // 提取文章关键要点
+  const extractKeyPoints = useCallback((content: string) => {
+    if (!content) return []
+
+    // 简单的关键要点提取逻辑
+    const sentences = content.split(/[。！？]/).filter(s => s.trim().length > 10)
+    return sentences.slice(0, 5).map(s => s.trim()) // 取前5个较长句子作为关键要点
+  }, [])
+
+  // 分析写作风格
+  const analyzeWritingStyle = useCallback((content: string) => {
+    if (!content) return 'unknown'
+
+    const textLength = content.length
+    const sentences = content.split(/[。！？]/).length
+    const avgSentenceLength = textLength / sentences
+
+    // 简单的写作风格分析
+    if (avgSentenceLength > 50) return 'professional' // 专业学术风格
+    if (avgSentenceLength > 30) return 'narrative'    // 叙述风格
+    return 'conversational'                          // 对话风格
+  }, [])
+
+  // 分析内容结构
+  const analyzeContentStructure = useCallback((content: string) => {
+    if (!content) return { hasIntroduction: false, hasBody: false, hasConclusion: false }
+
+    const paragraphs = content.split('\n').filter(p => p.trim().length > 0)
+    const hasIntroduction = paragraphs.length > 0 && paragraphs[0].length < 200
+    const hasBody = paragraphs.length > 2
+    const hasConclusion = paragraphs.length > 0 &&
+      (paragraphs[paragraphs.length - 1].includes('总结') ||
+       paragraphs[paragraphs.length - 1].includes('总之') ||
+       paragraphs[paragraphs.length - 1].includes('结语'))
+
+    return { hasIntroduction, hasBody, hasConclusion }
+  }, [])
+
+  // 确定创作策略
+  const determineCreationStrategy = useCallback((topic: any, articles: any[]) => {
+    if (articles.length === 0) return 'original'
+
+    const avgReads = articles.reduce((sum, a) => sum + (a.reads || 0), 0) / articles.length
+    const avgLikes = articles.reduce((sum, a) => sum + (a.likes || 0), 0) / articles.length
+
+    // 根据爆文数据确定创作策略
+    if (avgReads > 10000 && avgLikes > 500) {
+      return 'viral_adaptation' // 爆文改编策略
+    } else if (articles.length >= 3) {
+      return 'multi_reference'    // 多参考资料策略
+    } else {
+      return 'single_reference'   // 单一参考策略
+    }
   }, [])
 
   // 生成文章
@@ -380,6 +646,35 @@ export default function CreatePage() {
     }
     if (selectedSource === 'custom' && !customTopic.trim()) {
       setError('请输入自定义选题')
+      return
+    }
+
+    // 构建增强的二创分析数据
+    const enhancedAnalysisData = {
+      topic: selectedTopic || { title: customTopic, description: '' },
+      referenceArticles: selectedArticles.map(article => ({
+        title: article.title,
+        summary: article.summary,
+        content: article.content,
+        keyPoints: extractKeyPoints(article.content), // 提取关键要点
+        engagementMetrics: {
+          reads: article.reads,
+          likes: article.likes,
+          engagementRate: article.engagementRate
+        },
+        writingStyle: analyzeWritingStyle(article.content), // 分析写作风格
+        structure: analyzeContentStructure(article.content) // 分析内容结构
+      })),
+      creationStrategy: determineCreationStrategy(selectedTopic, selectedArticles)
+    }
+
+    // 验证创作模式要求
+    if (creationMode === 'original' && !originalInspiration.trim()) {
+      setError('原创模式请输入原创灵感内容')
+      return
+    }
+    if (creationMode === 'reference' && selectedArticles.length === 0) {
+      setError('对标模式请选择至少一篇对标文章')
       return
     }
 
@@ -396,8 +691,13 @@ export default function CreatePage() {
         imageCount: parseInt(imageCount),
         imageStyle,
         imageRatio,
+        creationMode,
+        originalInspiration: creationMode === 'original' ? originalInspiration : undefined,
+        referenceArticles: creationMode === 'reference' ? selectedArticles : [],
         isBatch: enableBatch && batchCount > 1,
-        count: batchCount
+        count: batchCount,
+        // 增强的二创分析数据
+        enhancedAnalysis: creationMode === 'reference' ? enhancedAnalysisData : null
       }
 
       const response = await fetch('/api/generate-article', {
@@ -520,10 +820,21 @@ export default function CreatePage() {
 
   // 优化的内容渲染函数
   const renderOptimizedContent = (content: string, images: any[]) => {
-    const paragraphs = content.split('\n').filter(p => p.trim())
-    const totalParagraphs = paragraphs.length
+    // 首先清理内容，移除多余的空行和Markdown符号
+    const cleanContent = content
+      .split('\n')
+      .map(line => line.trim())
+      .filter((line, index, arr) =>
+        line.length > 0 || (index > 0 && index < arr.length - 1 && arr[index - 1].length > 0 && arr[index + 1].length > 0)
+      )
+      .join('\n')
+
+    const paragraphs = cleanContent.split('\n').filter(p => p.trim())
     const imagesCount = images.length
-    const elements: JSX.Element[] = []
+    const elements: React.ReactNode[] = []
+
+    // 用于跟踪图片插入位置
+    let imageInsertIndex = 0
 
     paragraphs.forEach((paragraph, index) => {
       const trimmed = paragraph.trim()
@@ -533,122 +844,122 @@ export default function CreatePage() {
       if (trimmed.startsWith('##')) {
         const level = trimmed.match(/^#+/)?.[0].length || 2
         const text = trimmed.replace(/^#+\s*/, '')
-        const HeadingTag = `h${level}` as keyof JSX.IntrinsicElements
 
         elements.push(
-          <HeadingTag key={`h${index}`} className="text-2xl font-bold text-gray-900 mt-8 mb-4 border-b border-gray-200 pb-2">
+          <h3
+            key={`h${index}`}
+            className="text-xl font-bold text-gray-900 mt-8 mb-4 leading-relaxed"
+          >
             {text}
-          </HeadingTag>
+          </h3>
         )
       }
-      // 处理列表项
-      else if (trimmed.startsWith('- ')) {
-        const items = trimmed.split('\n').map(item => item.replace(/^- /, '').trim()).filter(Boolean)
+      // 处理无序列表 - 转换为普通段落，移除星号和减号
+      else if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+        const itemText = trimmed.replace(/^[-*]\s*/, '').trim()
+
         elements.push(
-          <ul key={`ul${index}`} className="space-y-2 my-6 bg-blue-50 p-4 rounded-lg border-l-4 border-blue-500">
-            {items.map((item, i) => (
-              <li key={i} className="text-gray-700 leading-relaxed flex items-start">
-                <span className="text-blue-500 mr-2">•</span>
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
+          <p
+            key={`li${index}`}
+            className="text-gray-700 leading-relaxed mb-4 pl-4"
+            style={{ borderLeft: '2px solid #666' }}
+          >
+            • {itemText}
+          </p>
         )
       }
-      // 处理数字列表
+      // 处理有序列表 - 保持编号
       else if (/^\d+\.\s/.test(trimmed)) {
-        const items = trimmed.split('\n').filter(Boolean)
-        elements.push(
-          <ol key={`ol${index}`} className="space-y-2 my-6 bg-green-50 p-4 rounded-lg border-l-4 border-green-500">
-            {items.map((item, i) => (
-              <li key={i} className="text-gray-700 leading-relaxed flex items-start">
-                <span className="text-green-500 font-semibold mr-2">{i + 1}.</span>
-                <span>{item.replace(/^\d+\.\s/, '')}</span>
-              </li>
-            ))}
-          </ol>
-        )
-      }
-      // 处理引用
-      else if (trimmed.startsWith('>')) {
-        const quoteText = trimmed.replace(/^>\s*/, '')
-        elements.push(
-          <blockquote key={`quote${index}`} className="border-l-4 border-orange-500 bg-orange-50 pl-4 py-2 my-6 italic text-gray-700">
-            {quoteText}
-          </blockquote>
-        )
-      }
-      // 处理普通段落
-      else {
-        // 分割长段落为更短的句子
-        const sentences = trimmed.split(/[。！？]/).filter(s => s.trim())
-
-        if (sentences.length > 3) {
-          // 长段落分成多个小段落
-          const chunks = []
-          for (let i = 0; i < sentences.length; i += 2) {
-            chunks.push(sentences.slice(i, i + 2).join('。') + '。')
-          }
-
-          chunks.forEach((chunk, chunkIndex) => {
-            elements.push(
-              <p key={`p${index}_${chunkIndex}`} className="text-gray-700 leading-relaxed mb-4 text-justify">
-                {chunk}
-              </p>
-            )
-          })
-        } else {
+        const match = trimmed.match(/^(\d+)\.\s(.*)$/)
+        if (match) {
           elements.push(
-            <p key={`p${index}`} className="text-gray-700 leading-relaxed mb-4 text-justify">
-              {trimmed}
+            <p
+              key={`oli${index}`}
+              className="text-gray-700 leading-relaxed mb-4 font-medium"
+            >
+              {match[1]}. {match[2]}
             </p>
           )
         }
       }
+      // 处理引用 - 简化为引用格式
+      else if (trimmed.startsWith('>')) {
+        const quoteText = trimmed.replace(/^>\s*/, '').trim()
 
-      // 智能插入图片
-      if (imagesCount > 0) {
-        // 在第2、4、6段后插入图片
-        const insertPositions = [1, 3, 5]
-        if (insertPositions.includes(index) && elements.length > 0) {
-          const imageIndex = Math.min(Math.floor(index / 2), imagesCount - 1)
-          if (imageIndex >= 0 && imageIndex < imagesCount) {
-            const image = images[imageIndex]
-            // 兼容不同的图片数据结构
-            const imageUrl = image.url || image
-            const imageDesc = image.description || `配图 ${imageIndex + 1}`
+        elements.push(
+          <div
+            key={`quote${index}`}
+            className="my-6 py-3 px-4 border-l-3 border-gray-400 bg-gray-50 text-gray-600 italic"
+          >
+            {quoteText}
+          </div>
+        )
+      }
+      // 处理普通段落
+      else {
+        // 清理内容中的Markdown格式符号
+        let cleanText = trimmed
+          .replace(/\*\*(.*?)\*\*/g, '$1') // 移除粗体标记
+          .replace(/\*(.*?)\*/g, '$1') // 移除斜体标记
+          .replace(/`(.*?)`/g, '$1') // 移除行内代码标记
 
-            elements.push(
-              <div key={`img${index}`} className="my-8 bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden">
-                <img
-                  src={imageUrl}
-                  alt={imageDesc}
-                  className="w-full h-auto"
-                  style={{
-                    aspectRatio: '16/9',
-                    objectFit: 'cover'
-                  }}
-                  onError={(e) => {
-                    console.warn('图片加载失败:', imageUrl)
-                    e.currentTarget.style.display = 'none'
-                  }}
-                  onLoad={() => {
-                    console.log('图片加载成功:', imageUrl)
-                  }}
-                />
-                <div className="p-3 bg-gray-50 text-center">
-                  <p className="text-sm text-gray-600 font-medium">
-                    {imageDesc}
-                  </p>
-                </div>
-              </div>
-            )
-          }
+        elements.push(
+          <p
+            key={`p${index}`}
+            className="text-gray-800 leading-relaxed mb-5 text-base"
+            style={{ textIndent: '2em' }}
+          >
+            {cleanText}
+          </p>
+        )
+      }
+
+      // 在合适的段落位置插入图片
+      if (imagesCount > 0 && imageInsertIndex < imagesCount) {
+        // 在第2、4、6段落后插入图片（使用0-based索引）
+        const insertAfterParagraphs = [1, 3, 5]
+
+        if (insertAfterParagraphs.includes(index % 6)) {
+          const image = images[imageInsertIndex]
+          const imageUrl = image.url || image
+          const imageDesc = image.description || ''
+
+          elements.push(
+            <div key={`img${imageInsertIndex}`} className="my-8 text-center">
+              <img
+                src={imageUrl}
+                alt={imageDesc}
+                className="max-w-full h-auto mx-auto rounded"
+                style={{
+                  maxHeight: '400px',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                }}
+                onError={(e) => {
+                  console.warn('图片加载失败:', imageUrl)
+                  const target = e.currentTarget
+                  target.style.display = 'none'
+                  if (target.parentElement) {
+                    target.parentElement.innerHTML = `
+                      <div class="text-gray-500 text-sm py-4">
+                        [图片加载失败]
+                      </div>
+                    `
+                  }
+                }}
+              />
+              {imageDesc && (
+                <p className="text-sm text-gray-600 mt-2 text-center italic">
+                  {imageDesc}
+                </p>
+              )}
+            </div>
+          )
+          imageInsertIndex++
         }
       }
     })
 
-    return elements
+    return <>{elements}</>
   }
 
   // 重新生成封面
@@ -759,7 +1070,7 @@ export default function CreatePage() {
         readingTime: currentArticle.readingTime || calculateReadingTime(currentArticle.content)
       }
 
-      await DraftManager.saveToDraft(enhancedArticle)
+      await DraftManager.saveToDraft(enhancedArticle as any)
       setSuccess('文章已保存到草稿')
       setTimeout(() => setSuccess(null), 3000)
     } catch (error) {
@@ -844,11 +1155,11 @@ export default function CreatePage() {
 
   return (
     <div className="p-6">
-      {/* 页面标题 */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">内容创作</h1>
-        <p className="text-gray-500 mt-1">基于AI智能生成高质量文章，自动配图，支持批量创作</p>
-      </div>
+        {/* 页面标题 */}
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">内容创作</h1>
+          <p className="text-gray-500 mt-1">基于AI智能生成高质量文章，自动配图，支持批量创作</p>
+        </div>
 
       {/* 错误和成功提示 */}
       {error && (
@@ -1001,15 +1312,21 @@ export default function CreatePage() {
                           </div>
                           {/* 三维度分析标签 */}
                           <div className="flex flex-wrap gap-1 mt-2">
-                            <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs">
-                              {topic.decisionStage.stage}
-                            </span>
-                            <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs">
-                              {topic.audienceScene.audience}
-                            </span>
-                            <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs">
-                              {topic.audienceScene.scene}
-                            </span>
+                            {topic.decisionStage?.stage && (
+                              <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs">
+                                {topic.decisionStage.stage}
+                              </span>
+                            )}
+                            {topic.audienceScene?.audience && (
+                              <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs">
+                                {topic.audienceScene.audience}
+                              </span>
+                            )}
+                            {topic.audienceScene?.scene && (
+                              <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs">
+                                {topic.audienceScene.scene}
+                              </span>
+                            )}
                             {topic.keywords?.category && (
                               <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-medium">
                                 {topic.keywords.category}
@@ -1033,6 +1350,291 @@ export default function CreatePage() {
               />
             )}
           </div>
+
+          {/* 爆文选择功能 - 优化版 */}
+          {selectedSource === 'insights' && selectedTopic && (
+            <div className="bg-gradient-to-br from-orange-50 to-red-50 rounded-2xl p-6 border border-orange-200 shadow-lg">
+              {/* 标题区域 */}
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center">
+                  <div className="w-10 h-10 bg-gradient-to-r from-orange-500 to-red-500 rounded-lg flex items-center justify-center mr-3">
+                    <TrendingUp className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-900">对标爆文选择</h2>
+                    <p className="text-sm text-gray-600 mt-0.5">选择优质爆文，AI将学习其爆点进行创作</p>
+                  </div>
+                </div>
+                <button
+                  onClick={toggleArticleSelection}
+                  className={`px-4 py-2 rounded-xl font-medium transition-all duration-200 flex items-center ${
+                    showArticleSelection
+                      ? 'bg-orange-100 text-orange-700 hover:bg-orange-200'
+                      : 'bg-white text-orange-600 hover:bg-orange-50 border border-orange-200'
+                  }`}
+                >
+                  {showArticleSelection ? '收起选择' : '展开选择'}
+                  <ChevronDown className={`w-4 h-4 ml-1.5 transform transition-transform duration-200 ${showArticleSelection ? 'rotate-180' : ''}`} />
+                </button>
+              </div>
+
+              {/* 展开的内容区域 */}
+              {showArticleSelection && (
+                <div className="space-y-5">
+                  {/* 加载状态 */}
+                  {loadingArticles && (
+                    <div className="text-center py-12 bg-white/60 rounded-xl backdrop-blur-sm">
+                      <div className="relative w-16 h-16 mx-auto mb-4">
+                        <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center">
+                          <TrendingUp className="w-8 h-8 text-orange-500" />
+                        </div>
+                        <div className="absolute inset-0 w-16 h-16 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
+                      </div>
+                      <h3 className="text-lg font-semibold text-gray-800 mb-2">正在分析爆文数据</h3>
+                      <p className="text-sm text-gray-600">基于选题智能匹配相关爆文，请稍候...</p>
+                      <div className="mt-4 space-y-1 text-xs text-gray-500">
+                        <p className="flex items-center justify-center">
+                          <span className="w-2 h-2 bg-orange-500 rounded-full mr-2 animate-pulse"></span>
+                          分析选题关键词...
+                        </p>
+                        <p className="flex items-center justify-center">
+                          <span className="w-2 h-2 bg-orange-500 rounded-full mr-2 animate-pulse" style={{ animationDelay: '0.2s' }}></span>
+                          匹配相关爆文...
+                        </p>
+                        <p className="flex items-center justify-center">
+                          <span className="w-2 h-2 bg-orange-500 rounded-full mr-2 animate-pulse" style={{ animationDelay: '0.4s' }}></span>
+                          计算内容相关性...
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 空状态 */}
+                  {!loadingArticles && relatedArticles.length === 0 && (
+                    <div className="text-center py-12 bg-white/60 rounded-xl backdrop-blur-sm">
+                      <div className="w-20 h-20 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <FileText className="w-10 h-10 text-blue-400" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-gray-800 mb-2">暂无相关爆文</h3>
+                      <p className="text-sm text-gray-600 mb-4 max-w-md mx-auto">
+                        当前选题没有找到相关的爆文数据。请确保：
+                      </p>
+                      <div className="text-left max-w-md mx-auto mb-6 space-y-2">
+                        <div className="flex items-start space-x-2">
+                          <span className="text-blue-500 mt-1">•</span>
+                          <span className="text-sm text-gray-600">已进行选题分析并获得文章数据</span>
+                        </div>
+                        <div className="flex items-start space-x-2">
+                          <span className="text-blue-500 mt-1">•</span>
+                          <span className="text-sm text-gray-600">选题标题与分析内容相关</span>
+                        </div>
+                        <div className="flex items-start space-x-2">
+                          <span className="text-blue-500 mt-1">•</span>
+                          <span className="text-sm text-gray-600">分析结果中包含相关文章</span>
+                        </div>
+                      </div>
+                      <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                        <Link
+                          href="/analysis"
+                          className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 text-white text-sm font-medium rounded-lg hover:from-blue-600 hover:to-indigo-600 transition-all"
+                        >
+                          <Target className="w-4 h-4 mr-2" />
+                          前往分析页面
+                        </Link>
+                        <button
+                          onClick={() => fetchRelatedArticles(selectedTopic!)}
+                          className="inline-flex items-center px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-all"
+                        >
+                          <RefreshCw className="w-4 h-4 mr-2" />
+                          重新匹配
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 文章列表 */}
+                  {!loadingArticles && relatedArticles.length > 0 && (
+                    <>
+                      {/* 统计信息 */}
+                      <div className="bg-gradient-to-r from-orange-100 to-red-100 rounded-xl p-4 border border-orange-200">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center">
+                            <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center mr-3">
+                              <span className="text-lg font-bold text-orange-600">{relatedArticles.length}</span>
+                            </div>
+                            <div>
+                              <p className="font-medium text-gray-800">找到相关爆文</p>
+                              <p className="text-sm text-gray-600">基于选题「{selectedTopic.title}」智能匹配</p>
+                            </div>
+                          </div>
+                          {selectedArticles.length > 0 && (
+                            <div className="bg-green-100 text-green-700 px-3 py-1.5 rounded-lg font-medium text-sm">
+                              已选择 {selectedArticles.length} 篇
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* 文章卡片列表 */}
+                      <div className="space-y-3 max-h-80 overflow-y-auto pr-2">
+                        {relatedArticles.map((article, index) => (
+                          <div
+                            key={index}
+                            onClick={() => toggleArticleSelect(article)}
+                            className={`group relative p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 ${
+                              selectedArticles.some(a => a.title === article.title)
+                                ? 'border-gradient-to-r from-orange-500 to-red-500 bg-gradient-to-r from-orange-50 to-red-50 shadow-lg transform scale-[1.02]'
+                                : 'border-gray-200 bg-white hover:border-orange-300 hover:shadow-md hover:transform hover:scale-[1.01]'
+                            }`}
+                          >
+                            {/* 选中标记 */}
+                            <div className="absolute top-3 right-3">
+                              <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
+                                selectedArticles.some(a => a.title === article.title)
+                                  ? 'border-orange-500 bg-orange-500'
+                                  : 'border-gray-300 group-hover:border-orange-400'
+                              }`}>
+                                {selectedArticles.some(a => a.title === article.title) && (
+                                  <Check className="w-4 h-4 text-white" />
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="pr-8">
+                              {/* 文章标题 */}
+                              <h3 className="font-semibold text-gray-900 mb-2 line-clamp-2 group-hover:text-orange-700 transition-colors">
+                                {article.title}
+                              </h3>
+
+                              {/* 文章摘要 */}
+                              <p className="text-sm text-gray-600 mb-3 line-clamp-3 leading-relaxed">
+                                {article.summary}
+                              </p>
+
+                              {/* 数据指标 */}
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center space-x-4">
+                                  <div className="flex items-center text-orange-600">
+                                    <span className="text-lg mr-1">🔥</span>
+                                    <span className="font-semibold text-sm">
+                                      {article.reads?.toLocaleString() || 'N/A'}
+                                    </span>
+                                    <span className="text-xs ml-1">阅读</span>
+                                  </div>
+                                  <div className="flex items-center text-green-600">
+                                    <span className="text-lg mr-1">👍</span>
+                                    <span className="font-semibold text-sm">
+                                      {article.likes?.toLocaleString() || 'N/A'}
+                                    </span>
+                                    <span className="text-xs ml-1">点赞</span>
+                                  </div>
+                                  {article.engagementRate && (
+                                    <div className="flex items-center text-blue-600">
+                                      <span className="text-lg mr-1">📊</span>
+                                      <span className="font-semibold text-sm">
+                                        {article.engagementRate}
+                                      </span>
+                                      <span className="text-xs ml-1">互动</span>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* 选择提示和操作按钮 */}
+                                <div className="flex items-center justify-between">
+                                  <div className={`text-xs font-medium px-2 py-1 rounded-full ${
+                                    selectedArticles.some(a => a.title === article.title)
+                                      ? 'bg-orange-100 text-orange-700'
+                                      : 'bg-gray-100 text-gray-500 group-hover:bg-orange-100 group-hover:text-orange-700'
+                                  }`}>
+                                    {selectedArticles.some(a => a.title === article.title) ? '已选择' : '点击选择'}
+                                  </div>
+
+                                  {/* 查看原文按钮 */}
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      toggleArticleContent(article.title)
+                                    }}
+                                    className={`text-xs font-medium px-2 py-1 rounded-full transition-colors ${
+                                      expandedArticle === article.title
+                                        ? 'bg-blue-100 text-blue-700'
+                                        : 'bg-gray-100 text-gray-500 hover:bg-blue-100 hover:text-blue-700'
+                                    }`}
+                                  >
+                                    {expandedArticle === article.title ? '收起原文' : '查看原文'}
+                                  </button>
+                                </div>
+                              </div>
+
+                            {/* 原文内容展开区域 */}
+                            {expandedArticle === article.title && (
+                              <div className="border-t border-gray-100 p-4 bg-gray-50">
+                                <h4 className="text-sm font-semibold text-gray-700 mb-2">原文内容</h4>
+                                <div className="text-xs text-gray-600 leading-relaxed max-h-60 overflow-y-auto">
+                                  {article.content ? (
+                                    <div className="whitespace-pre-wrap break-words">
+                                      {article.content}
+                                    </div>
+                                  ) : (
+                                    <div className="text-gray-400 italic">
+                                      暂无原文内容
+                                    </div>
+                                  )}
+                                </div>
+                                {article.url && (
+                                  <div className="mt-3 pt-3 border-t border-gray-200">
+                                    <a
+                                      href={article.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-xs text-blue-600 hover:text-blue-800 flex items-center"
+                                    >
+                                      <span>🔗 查看原文链接</span>
+                                      <svg className="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                      </svg>
+                                    </a>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* 选择总结 */}
+                      {selectedArticles.length > 0 && (
+                        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
+                          <div className="flex items-start">
+                            <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center mr-3 flex-shrink-0">
+                              <Check className="w-5 h-5 text-blue-600" />
+                            </div>
+                            <div>
+                              <h4 className="font-semibold text-blue-900 mb-1">
+                                已选择 {selectedArticles.length} 篇优质爆文
+                              </h4>
+                              <p className="text-sm text-blue-700 leading-relaxed">
+                                AI将深度分析这些爆文的标题技巧、内容结构、情感爆点和用户互动模式，
+                                为您创作出更具吸引力和传播力的优质内容
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 操作提示 */}
+                      <div className="text-center">
+                        <p className="text-xs text-gray-500">
+                          💡 提示：选择1-3篇爆文效果最佳，太多选择可能会影响创作方向
+                        </p>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* 创作参数 */}
           <div className="bg-white rounded-xl p-6 border border-gray-200">
@@ -1076,6 +1678,76 @@ export default function CreatePage() {
                   <option value="educational">教育科普</option>
                   <option value="emotional">情感共鸣</option>
                 </select>
+              </div>
+
+              {/* 创作模式选择 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <Target className="w-4 h-4 inline mr-1" />
+                  创作模式
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => setCreationMode('reference')}
+                    className={`p-3 rounded-lg border-2 transition-all ${
+                      creationMode === 'reference'
+                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                        : 'border-gray-200 hover:bg-gray-50 text-gray-700'
+                    }`}
+                  >
+                    <div className="flex flex-col items-center">
+                      <Copy className="w-5 h-5 mb-1" />
+                      <span className="font-medium">对标创作</span>
+                      <span className="text-xs mt-1">参考爆文二创改写</span>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => setCreationMode('original')}
+                    className={`p-3 rounded-lg border-2 transition-all ${
+                      creationMode === 'original'
+                        ? 'border-green-500 bg-green-50 text-green-700'
+                        : 'border-gray-200 hover:bg-gray-50 text-gray-700'
+                    }`}
+                  >
+                    <div className="flex flex-col items-center">
+                      <Lightbulb className="w-5 h-5 mb-1" />
+                      <span className="font-medium">原创创作</span>
+                      <span className="text-xs mt-1">基于灵感深度创作</span>
+                    </div>
+                  </button>
+                </div>
+
+                {/* 原创灵感输入 */}
+                {creationMode === 'original' && (
+                  <div className="mt-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <Edit3 className="w-4 h-4 inline mr-1" />
+                      原创灵感
+                    </label>
+                    <textarea
+                      value={originalInspiration}
+                      onChange={(e) => setOriginalInspiration(e.target.value)}
+                      placeholder="请输入您的原创灵感、观点和想法..."
+                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 resize-none"
+                      rows={4}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      AI将基于您的原创灵感进行深度创作，融入您的独特观点和思考
+                    </p>
+                  </div>
+                )}
+
+                {/* 对标模式提示 */}
+                {creationMode === 'reference' && selectedSource === 'insights' && selectedTopic && (
+                  <div className="mt-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <p className="text-sm text-blue-800">
+                      <strong>对标模式</strong>：AI将重点分析选题洞察和您选择的爆文，吸收其爆点和优质内容，进行二次创作改写
+                      {selectedArticles.length > 0 && (
+                        <span className="block mt-1">已选择 {selectedArticles.length} 篇对标文章作为参考</span>
+                      )}
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -1673,7 +2345,7 @@ export default function CreatePage() {
                       <div
                         className="w-full h-full"
                         style={{
-                          backgroundImage: `url(${generatedArticles[currentArticleIndex].cover.url})`,
+                          backgroundImage: `url(${generatedArticles[currentArticleIndex]?.cover?.url || ''})`,
                           backgroundSize: 'cover',
                           backgroundPosition: 'center',
                           backgroundRepeat: 'no-repeat'
@@ -1712,7 +2384,7 @@ export default function CreatePage() {
                           <div>
                             <span className="text-gray-500">使用模板：</span>
                             <span className="text-gray-700 ml-2">
-                              {COVER_TEMPLATES.find(t => t.id === generatedArticles[currentArticleIndex].cover.template)?.name || '智能选择'}
+                              {COVER_TEMPLATES.find(t => t.id === generatedArticles[currentArticleIndex]?.cover?.template)?.name || '智能选择'}
                             </span>
                           </div>
                         )}

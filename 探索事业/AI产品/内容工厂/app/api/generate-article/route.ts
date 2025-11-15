@@ -4,7 +4,19 @@ import { TopicWithHistory, CreationParams } from '@/types/ai-analysis'
 
 export async function POST(request: NextRequest) {
   try {
-    const { topic, length, style, imageCount, imageStyle, uniqueAngle, isBatch, count } = await request.json()
+    const {
+      topic,
+      length,
+      style,
+      imageCount,
+      imageStyle,
+      uniqueAngle,
+      creationMode,
+      originalInspiration,
+      referenceArticles,
+      isBatch,
+      count
+    } = await request.json()
 
     if (!topic) {
       return NextResponse.json(
@@ -20,7 +32,10 @@ export async function POST(request: NextRequest) {
       style,
       imageCount,
       imageStyle,
-      uniqueAngle
+      uniqueAngle,
+      creationMode,
+      originalInspiration,
+      referenceArticles
     }
 
     let result

@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Search, Loader2, History, AlertCircle, Award, BarChart3, Eye, Heart, TrendingUp, Users, Zap, Hash, Clock, Sparkles, RefreshCw, Download, PenTool, ChevronRight, X, ExternalLink, BarChart } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { Search, Loader2, History, AlertCircle, Award, BarChart3, Eye, Heart, TrendingUp, Users, Zap, Hash, Clock, Sparkles, RefreshCw, Download, PenTool, ChevronRight, X, ExternalLink, BarChart, Check } from 'lucide-react'
 import Link from 'next/link'
 import { searchWeChatArticles } from '@/lib/wechat-api'
 import { WeChatArticle } from '@/types/wechat-api'
@@ -187,6 +187,58 @@ export default function AnalysisPage() {
   const [showCustomInput, setShowCustomInput] = useState(false)
   const [aiInsights, setAiInsights] = useState<TopicInsight[]>([])
   const [aiSummaries, setAiSummaries] = useState<ArticleSummary[]>([])
+  const [selectedInsights, setSelectedInsights] = useState<Set<number>>(new Set())
+
+  // 保存选中的洞察到localStorage
+  const saveSelectedInsights = useCallback(() => {
+    const insights = aiInsights.length > 0 ? aiInsights : mockAnalysisResult.insights
+    const selectedData = Array.from(selectedInsights).map(index => ({
+      insight: insights[index],
+      index
+    }))
+
+    localStorage.setItem('selected-topics', JSON.stringify(selectedData))
+    console.log('已保存选中的洞察:', selectedData.length, '个')
+  }, [aiInsights, selectedInsights])
+
+  // 从localStorage恢复最近的分析结果
+  useEffect(() => {
+    const savedAnalysis = localStorage.getItem('ai-analysis-results')
+    if (savedAnalysis) {
+      try {
+        const analysisData = JSON.parse(savedAnalysis)
+        if (analysisData.insights && analysisData.insights.length > 0) {
+          setAiInsights(analysisData.insights)
+        }
+        if (analysisData.summaries && analysisData.summaries.length > 0) {
+          setAiSummaries(analysisData.summaries)
+        }
+        if (analysisData.keyword) {
+          setKeyword(analysisData.keyword)
+        }
+        if (analysisData.articles) {
+          setArticles(analysisData.articles)
+        }
+        setShowResult(true)
+        console.log('已恢复上次分析结果')
+      } catch (error) {
+        console.error('恢复分析结果失败:', error)
+      }
+    }
+  }, [])
+
+  // 切换洞察选中状态
+  const toggleInsightSelection = useCallback((index: number) => {
+    setSelectedInsights(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(index)) {
+        newSet.delete(index)
+      } else {
+        newSet.add(index)
+      }
+      return newSet
+    })
+  }, [])
 
   // 从数据库加载历史记录
   useEffect(() => {
@@ -294,6 +346,8 @@ export default function AnalysisPage() {
 
           // 保存AI分析结果到localStorage，供创作页面使用
           const analysisData = {
+            keyword,
+            articles: articlesData,
             summaries: aiResult.data.summaries,
             insights: aiResult.data.insights,
             stats: aiResult.data.stats,
@@ -334,7 +388,12 @@ export default function AnalysisPage() {
   // 计算真实统计数据
   const calculateStats = () => {
     if (!articles || articles.length === 0) {
-      return mockAnalysisResult.stats
+      return {
+        totalArticles: 0,
+        avgReads: 0,
+        avgLikes: 0,
+        avgEngagement: '0%'
+      }
     }
 
     const totalArticles = articles.length
@@ -401,7 +460,6 @@ export default function AnalysisPage() {
       generatedAt: new Date().toLocaleString('zh-CN'),
       articles: {
         total: stats.totalArticles,
-        withPraise: stats.withPraise,
         avgReads: stats.avgReads,
         avgLikes: stats.avgLikes
       },
@@ -431,7 +489,6 @@ export default function AnalysisPage() {
 
     content += `【文章统计概览】\n`
     content += `总文章数：${reportData.articles.total}篇\n`
-    content += `有点赞数：${reportData.articles.withPraise}篇\n`
     content += `平均阅读量：${reportData.articles.avgReads}\n`
     content += `平均点赞数：${reportData.articles.avgLikes}\n\n`
 
@@ -561,8 +618,8 @@ export default function AnalysisPage() {
             <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
             <span className="text-sm text-gray-600 font-medium">专注于公众号文章分析</span>
           </div>
-          <span className="text-sm text-gray-600 font-medium">分析文章数：</span>
           <div className="flex items-center space-x-2">
+            <span className="text-sm text-gray-600 font-medium">分析文章数：</span>
             {[5, 10, 20].map((count) => (
               <button
                 key={count}
@@ -856,12 +913,32 @@ export default function AnalysisPage() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {(aiInsights.length > 0 ? aiInsights : mockAnalysisResult.insights).map((insight, index) => (
-                <div key={index} className="p-4 rounded-lg bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-100">
-                  <div className="flex items-start space-x-3">
-                    <div className="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center flex-shrink-0 font-semibold">
-                      {index + 1}
-                    </div>
-                    <div className="flex-1">
+                <div key={index} className={`p-4 rounded-lg border transition-all ${
+                  selectedInsights.has(index)
+                    ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 shadow-sm'
+                    : 'bg-gradient-to-r from-blue-50 to-purple-50 border-blue-100'
+                }`}>
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start space-x-3">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 font-semibold transition-colors ${
+                        selectedInsights.has(index)
+                          ? 'bg-green-500 text-white'
+                          : 'bg-blue-500 text-white'
+                      }`}>
+                        {index + 1}
+                      </div>
+                      <button
+                        onClick={() => toggleInsightSelection(index)}
+                        className={`w-6 h-6 rounded border-2 flex items-center justify-center transition-colors ${
+                          selectedInsights.has(index)
+                            ? 'bg-green-500 border-green-500 text-white'
+                            : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'
+                        }`}
+                        title={selectedInsights.has(index) ? '已选中' : '选中此选题'}
+                      >
+                        {selectedInsights.has(index) && <Check className="w-4 h-4" />}
+                      </button>
+                      <div className="flex-1">
                       <h3 className="font-semibold text-gray-900 mb-1">{insight.title}</h3>
                       <p className="text-sm text-gray-600 leading-relaxed">{insight.description}</p>
                       <div className="mt-2 flex items-center">
@@ -961,6 +1038,7 @@ export default function AnalysisPage() {
                     </div>
                   </div>
                 </div>
+              </div>
               ))}
             </div>
 
@@ -970,11 +1048,17 @@ export default function AnalysisPage() {
                 <RefreshCw className="w-5 h-5 mr-2" />
                 重新分析
               </button>
-              <Link href="/create" className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 flex items-center">
+              <button
+                onClick={() => {
+                  saveSelectedInsights()
+                  window.location.href = '/create'
+                }}
+                className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 flex items-center"
+              >
                 <PenTool className="w-5 h-5 mr-2" />
                 基于洞察创作
                 <ChevronRight className="w-4 h-4 ml-1" />
-              </Link>
+              </button>
             </div>
           </div>
 

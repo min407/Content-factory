@@ -25,8 +25,8 @@ export async function POST(request: NextRequest) {
     const summaries = await deepAnalyzeArticles(mockArticles)
 
     // 计算统计数据
-    const totalReads = mockArticles.reduce((sum, a) => sum + (a.read || 0), 0)
-    const totalLikes = mockArticles.reduce((sum, a) => sum + (a.praise || 0), 0)
+    const totalReads = mockArticles.reduce((sum, a) => sum + (a.reads || 0), 0)
+    const totalLikes = mockArticles.reduce((sum, a) => sum + (a.likes || 0), 0)
 
     const stats = {
       totalArticles: mockArticles.length,

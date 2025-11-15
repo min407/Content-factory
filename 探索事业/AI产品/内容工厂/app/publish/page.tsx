@@ -32,6 +32,7 @@ import {
 import Link from 'next/link'
 import { Draft } from '@/types/ai-analysis'
 import { DraftManager } from '@/lib/content-management'
+import WechatPublishModal from '@/components/WechatPublishModal'
 
 const statusConfig = {
   draft: { label: '草稿', color: 'bg-gray-100 text-gray-700', icon: FileText },
@@ -54,6 +55,10 @@ export default function PublishPage() {
   const [drafts, setDrafts] = useState<Draft[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+
+  // 公众号发布弹窗状态
+  const [showWechatPublishModal, setShowWechatPublishModal] = useState(false)
+  const [selectedDraft, setSelectedDraft] = useState<any>(null)
 
   // 加载草稿数据（直接从客户端localStorage读取）
   const loadDrafts = async () => {
@@ -83,12 +88,36 @@ export default function PublishPage() {
   }
 
   const handlePublish = (draftId: string, platform: 'xiaohongshu' | 'wechat') => {
-    setPublishingArticle(draftId)
-    // 模拟发布过程
-    setTimeout(() => {
-      setPublishingArticle(null)
-      alert(`成功发布到${platformConfig[platform].label}！`)
-    }, 2000)
+    if (platform === 'wechat') {
+      // 打开公众号发布弹窗
+      const draft = drafts.find(d => d.id === draftId)
+      if (draft) {
+        setSelectedDraft(draft)
+        setShowWechatPublishModal(true)
+        setShowDropdown(null)
+      }
+    } else {
+      // 小红书发布（保留原有模拟逻辑）
+      setPublishingArticle(draftId)
+      setTimeout(() => {
+        setPublishingArticle(null)
+        alert(`成功发布到${platformConfig[platform].label}！`)
+      }, 2000)
+    }
+  }
+
+  // 处理公众号发布成功
+  const handleWechatPublishSuccess = (result: any) => {
+    // 重新加载草稿列表
+    loadDrafts()
+    // 可以添加成功提示
+    console.log('公众号发布成功:', result)
+  }
+
+  // 处理公众号发布错误
+  const handleWechatPublishError = (error: string) => {
+    // 可以添加错误提示
+    console.error('公众号发布失败:', error)
   }
 
   const handleSelectAll = () => {
@@ -504,6 +533,20 @@ export default function PublishPage() {
           </div>
         )}
       </div>
+
+      {/* 公众号发布弹窗 */}
+      {showWechatPublishModal && selectedDraft && (
+        <WechatPublishModal
+          isOpen={showWechatPublishModal}
+          onClose={() => {
+            setShowWechatPublishModal(false)
+            setSelectedDraft(null)
+          }}
+          draft={selectedDraft}
+          onSuccess={handleWechatPublishSuccess}
+          onError={handleWechatPublishError}
+        />
+      )}
     </div>
   )
 }
