@@ -26,6 +26,11 @@ export interface TopicInsight {
   confidence: number         // 置信度（60-100）
   evidence: string[]         // 证据（引用文章标题）
   tags: string[]            // 额外标签
+  keywords: {
+    primary: string[]        // 主要关键词
+    secondary: string[]      // 次要关键词
+    category: string         // 关键词分类
+  }
 
   // 三维度分析字段
   decisionStage: {
@@ -58,17 +63,57 @@ export interface TopicWithHistory extends TopicInsight {
   sourceAnalysis: string  // 来源分析记录标识
 }
 
+// 封面图片类型
+export interface ArticleCover {
+  url: string
+  template?: string
+  title?: string
+  description?: string
+  prompt?: string
+  generatedAt: Date
+}
+
+// 封面模板类型
+export interface CoverTemplate {
+  id: string
+  name: string
+  description: string
+  preview: string
+  promptTemplate: string
+  titleFont: string
+  titleColor: string
+  backgroundColor: string
+  layout: 'center' | 'bottom' | 'top'
+}
+
 // 生成的文章类型
 export interface GeneratedArticle {
   id: string
   title: string
   content: string
   images: string[]
+  cover?: ArticleCover
   wordCount: number
   readingTime: number
   topicId: string
   createdAt: Date
   parameters: CreationParams
+}
+
+// 图片风格配置
+export interface ImageStyle {
+  value: string
+  label: string
+  description: string
+  promptTemplate: string
+}
+
+// 图片比例配置
+export interface ImageRatio {
+  value: string
+  label: string
+  description: string
+  aspectRatio: string
 }
 
 // 文章生成参数
@@ -78,6 +123,8 @@ export interface CreationParams {
   style: string
   imageCount: number
   uniqueAngle?: string
+  imageStyle?: string // 新增：图片风格选择
+  imageRatio?: string // 新增：图片比例选择
 }
 
 // 文章历史记录
@@ -100,11 +147,35 @@ export interface Draft {
   status: 'draft' | 'published' | 'archived'
 }
 
+// 内容历史记录项
+export interface ContentHistoryItem {
+  id: string
+  type: 'article' | 'image'
+  title: string
+  content?: string
+  images?: string[]
+  parameters: CreationParams
+  createdAt: Date
+  cacheKey: string
+  topic: TopicWithHistory
+  wordCount: number
+  imageStyle?: string
+  generationTime: number // 生成耗时（毫秒）
+}
+
+// 缓存项
+export interface CacheItem {
+  content: GeneratedArticle
+  expiresAt: Date
+  parameters: CreationParams
+}
+
 // 用户偏好设置
 export interface CreationPreferences {
   defaultLength: string
   defaultStyle: string
   defaultImageCount: string
+  defaultImageStyle: string
   autoSave: boolean
 }
 

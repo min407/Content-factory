@@ -40,14 +40,20 @@ export async function POST(request: NextRequest) {
     // 阶段2: 生成选题洞察
     const insights = await generateSmartTopicInsights(summaries, stats)
 
+    // 构建完整的分析结果，包含时间戳
+    const analysisResult = {
+      articles: mockArticles,
+      summaries,
+      insights,
+      stats,
+      analysisTime: Date.now()
+    }
+
+    // 保存到localStorage（通过客户端处理）
     return NextResponse.json({
       success: true,
-      data: {
-        articles: mockArticles,
-        summaries,
-        insights,
-        stats
-      }
+      data: analysisResult,
+      message: '分析完成，洞察已保存到本地'
     })
 
   } catch (error) {

@@ -8,8 +8,12 @@ import {
   TopicInsight,
   TopicWithHistory,
   GeneratedArticle,
-  CreationParams
+  CreationParams,
+  ImageStyle,
+  ArticleCover,
+  CoverTemplate
 } from '@/types/ai-analysis'
+import { ContentCache, IMAGE_STYLES, IMAGE_RATIOS, COVER_TEMPLATES, ContentUtils } from './content-cache'
 
 // OpenAI配置从环境变量读取
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || ''
@@ -205,6 +209,13 @@ JSON格式输出：
       "confidence": 85,
       "evidence": ["文章1标题", "文章2标题", "文章3标题"],
 
+      // 关键词分析
+      "keywords": {
+        "primary": ["核心关键词1", "核心关键词2", "核心关键词3"],
+        "secondary": ["次要关键词1", "次要关键词2", "次要关键词3"],
+        "category": "关键词分类（如：职场发展、副业创业、技能提升、生活效率等）"
+      },
+
       // 三维度分析
       "decisionStage": {
         "stage": "觉察期/认知期/调研期/决策期/行动期/成果期",
@@ -398,18 +409,27 @@ function getRecommendedInteraction(expectation: string): string {
 }
 
 /**
- * 生成单个AI文章
+ * 生成单个AI文章（增强版，支持缓存和智能图片生成）
  */
 export async function generateSingleArticle(params: CreationParams): Promise<GeneratedArticle> {
-  const { topic, length, style, imageCount, uniqueAngle } = params
+  const startTime = Date.now()
+  const { topic, length, style, imageCount, uniqueAngle, imageStyle = 'auto', imageRatio = '4:3' } = params
 
-  // 1. 生成智能写作提示词
+  // 1. 检查缓存
+  const cacheKey = ContentCache.generateCacheKey(params)
+  const cachedContent = await ContentCache.getCachedContent(cacheKey)
+  if (cachedContent) {
+    console.log('使用缓存内容，跳过生成')
+    return cachedContent
+  }
+
+  // 2. 生成智能写作提示词
   const stylePrompt = generateWritingStylePrompt(topic)
 
-  // 2. 获取字数范围
+  // 3. 获取字数范围
   const wordCount = getWordCountRange(length)
 
-  // 3. 构建完整文章生成提示词
+  // 4. 构建完整文章生成提示词
   const articlePrompt = `
 请基于以下选题洞察，生成一篇高质量的文章：
 
@@ -423,34 +443,92 @@ ${stylePrompt}
 **写作要求**:
 - 字数：${wordCount}字
 - 风格：${style}
-- 结构：包含引人入胜的开头、主体内容、实用建议、总结展望
-- 内容：基于三维度分析提供有价值的内容
 - 语言：中文，流畅自然，适合微信公众号发布
+- 标题：直接输出干净的标题，不要"主标题"、"副标题"等标识，不要多余符号（如：·、•、：、#等），标题要简洁有力，可直接发布
 
-请生成完整的文章内容（包含标题）。
+**排版要求**（非常重要）:
+1. **标题结构**:
+   - 主标题明确吸引人
+   - 使用2-3级小标题分割内容
+   - 每个小标题控制在15字以内
+
+2. **段落优化**:
+   - 每段控制在3-5行，避免大段文字
+   - 段落之间用空行分隔
+   - 每句话长度控制在25字以内
+   - 使用短句，避免复杂长句
+
+3. **内容结构**:
+   - 开头：吸引读者，点明主题
+   - 主体：分3-5个部分，每个部分有小标题
+   - 结尾：总结要点，提供行动建议
+
+4. **阅读体验**:
+   - 使用列表符号（• 或 1. 2. 3.）列举要点
+   - 适当使用粗体强调重点
+   - 使用问句引起思考
+   - 加入具体案例和数据
+
+5. **爆款文章特征**:
+   - 开头3秒抓住注意力
+   - 内容实用有价值
+   - 结构清晰易读
+   - 结尾有分享点
+
+请按照以上排版要求生成完整的文章内容（包含标题）。
 `
 
-  // 4. 调用OpenAI生成文章
+  // 5. 调用OpenAI生成文章
   const articleContent = await callOpenAI([
     { role: 'system', content: '你是专业的文章创作者，擅长基于深度洞察生成高质量内容。你的文章结构清晰，内容实用，语言优美。' },
     { role: 'user', content: articlePrompt }
   ], 0.7)
 
-  // 5. 生成配图
-  const images = await generateArticleImages(topic, imageCount)
+  // 6. 提取标题和统计字数
+  const title = extractTitleFromContent(articleContent)
+  const wordCountActual = countWords(articleContent)
+  const readingTime = calculateReadingTime(articleContent)
 
-  // 6. 构建返回对象
-  return {
+  // 7. 根据文章实际长度智能调整图片数量
+  const actualImageCount = imageStyle === 'auto'
+    ? ContentUtils.calculateImageCount(wordCountActual)
+    : Math.min(imageCount, ContentUtils.calculateImageCount(wordCountActual))
+
+  // 8. 生成配图（使用新的智能图片生成系统）
+  const images = await generateSmartArticleImages(articleContent, title, actualImageCount, imageStyle, topic, imageRatio)
+
+  // 9. 构建返回对象
+  // 9. 生成封面图片
+  let cover: ArticleCover | undefined
+  try {
+    console.log('开始生成文章封面...')
+    cover = await generateArticleCover(title, articleContent)
+    console.log('文章封面生成成功')
+  } catch (error) {
+    console.error('封面生成失败:', error)
+    // 封面生成失败不影响文章本身
+  }
+
+  const generatedArticle: GeneratedArticle = {
     id: generateId(),
-    title: extractTitleFromContent(articleContent),
+    title,
     content: articleContent,
     images,
-    wordCount: countWords(articleContent),
-    readingTime: calculateReadingTime(articleContent),
+    cover,
+    wordCount: wordCountActual,
+    readingTime,
     topicId: topic.id,
     createdAt: new Date(),
     parameters: params
   }
+
+  // 10. 保存到缓存（历史记录由客户端处理）
+  const generationTime = Date.now() - startTime
+  await ContentCache.saveToCache(cacheKey, generatedArticle, params)
+
+  console.log(`文章生成完成，耗时 ${generationTime}ms，字数 ${wordCountActual}，图片 ${images.length} 张${cover ? '，包含封面' : ''}`)
+
+  return generatedArticle
 }
 
 /**
@@ -458,6 +536,7 @@ ${stylePrompt}
  */
 function getWordCountRange(length: string): string {
   const lengthMap = {
+    '500': '400-500',
     '500-800': '600-800',
     '800-1200': '900-1200',
     '1000-1500': '1200-1500',
@@ -477,15 +556,41 @@ function extractTitleFromContent(content: string): string {
   for (const line of lines) {
     const trimmed = line.trim()
     if (trimmed.startsWith('#')) {
-      return trimmed.replace(/^#+\s*/, '')
+      let title = trimmed.replace(/^#+\s*/, '')
+      title = cleanTitle(title)
+      if (title.length >= 8 && title.length <= 50) {
+        return title
+      }
     } else if (trimmed.length > 10 && trimmed.length < 50) {
-      return trimmed
+      const title = cleanTitle(trimmed)
+      return title
     }
   }
 
   // 如果没有找到合适的标题，使用内容的前30个字符
   const firstLine = lines[0]?.trim() || ''
-  return firstLine.length > 30 ? firstLine.substring(0, 30) + '...' : firstLine || '未命名文章'
+  const cleanedFirstLine = cleanTitle(firstLine)
+  return cleanedFirstLine.length > 30 ? cleanedFirstLine.substring(0, 30) + '...' : cleanedFirstLine || '未命名文章'
+}
+
+/**
+ * 清理标题，移除不需要的字符和格式
+ */
+function cleanTitle(title: string): string {
+  return title
+    // 移除Markdown粗体标记
+    .replace(/\*\*/g, '')
+    // 移除常见的标题标识符
+    .replace(/^(主标题|副标题|标题|小标题)[：:]\s*/i, '')
+    .replace(/^(（主标题）|【主标题】|《主标题》|（副标题）|【副标题】|《副标题》)/gi, '')
+    // 移除多余的符号
+    .replace(/[·••·]/g, '')
+    .replace(/[:：]\s*$/, '') // 移除末尾的冒号
+    .replace(/^\s*[#【】《》()\[\]{}]\s*/, '') // 移除开头和结尾的括号类符号
+    .replace(/\s*[#【】《》()\[\]{}]\s*$/, '')
+    // 清理多余空格
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 /**
@@ -508,40 +613,226 @@ function calculateReadingTime(content: string): number {
 }
 
 /**
- * 生成AI配图
+ * 智能文章图片生成系统（基于文章内容生成图片提示词）
  */
-export async function generateArticleImages(topic: TopicWithHistory, imageCount: number): Promise<string[]> {
+export async function generateSmartArticleImages(
+  articleContent: string,
+  articleTitle: string,
+  imageCount: number,
+  imageStyle: string,
+  topic?: TopicWithHistory,
+  imageRatio?: string
+): Promise<string[]> {
   if (imageCount === 0) return []
 
-  const prompts = generateImagePrompts(topic, imageCount)
-  const images = []
+  try {
+    // 1. 基于文章内容生成图片提示词
+    const imagePrompts = await generateImagePromptsFromContent(articleContent, articleTitle, imageCount, topic)
 
-  for (const prompt of prompts) {
-    try {
-      const image = await generateSingleImage(prompt)
-      images.push(image)
-    } catch (error) {
-      console.error('图片生成失败:', error)
-      // 使用fallback图片
-      images.push(getFallbackImage(prompt))
-    }
+    // 2. 获取图片风格配置
+    const styleConfig = IMAGE_STYLES.find(style => style.value === imageStyle) || IMAGE_STYLES[0]
+
+    // 3. 并行生成图片
+    const imagePromises = imagePrompts.map(async (prompt, index) => {
+      try {
+        // 3.1 为每个提示词添加风格修饰
+        const styledPrompt = applyImageStyle(prompt, styleConfig, index)
+
+        // 3.2 生成图片
+        const imageUrl = await generateSingleImageWithRetry(styledPrompt)
+
+        return imageUrl
+      } catch (error) {
+        console.error(`第 ${index + 1} 张图片生成失败:`, error)
+        // 3.3 使用fallback图片
+        return getFallbackImageWithStyle(prompt, styleConfig, index)
+      }
+    })
+
+    // 4. 等待所有图片生成完成（使用 allSettled 确保部分失败不影响其他图片）
+    const results = await Promise.allSettled(imagePromises)
+
+    // 5. 提取成功的图片URL
+    const images = results
+      .filter((result): result is PromiseFulfilledResult<string> => result.status === 'fulfilled')
+      .map(result => result.value)
+
+    console.log(`成功生成 ${images.length}/${imageCount} 张图片，风格: ${styleConfig.label}`)
+
+    return images
+
+  } catch (error) {
+    console.error('智能图片生成系统失败:', error)
+    // 如果整个系统失败，返回基础fallback图片
+    return Array.from({ length: imageCount }, (_, i) => getFallbackImageWithStyle('', IMAGE_STYLES[0], i))
   }
-
-  return images
 }
 
 /**
- * 根据选题内容生成图片提示词
+ * 基于文章内容生成图片提示词
  */
-function generateImagePrompts(topic: TopicWithHistory, count: number): string[] {
-  const basePrompts = [
-    `${topic.audienceScene.audience}在${topic.audienceScene.scene}的场景插画，简洁现代风格，商务插画`,
-    `${topic.title}相关的概念图，信息图表风格，蓝色调`,
-    `${topic.demandPainPoint.expectation}的视觉化表达，积极向上风格，温暖色调`,
-    '现代办公场景插画，简洁扁平化设计',
-    '学习和成长主题插画，励志风格'
+async function generateImagePromptsFromContent(
+  articleContent: string,
+  articleTitle: string,
+  count: number,
+  topic?: TopicWithHistory
+): Promise<string[]> {
+  try {
+    // 截取文章关键段落用于分析
+    const contentForAnalysis = articleContent.length > 2000
+      ? articleContent.substring(0, 2000) + '...'
+      : articleContent
+
+    const prompt = `
+请基于以下文章内容，生成 ${count} 个高质量、完全不同的图片提示词。
+
+文章标题：${articleTitle}
+文章内容：${contentForAnalysis}
+
+严格要求 - 必须生成完全不同的图片：
+🚫 **禁止重复**: 每个图片的场景、角度、构图、人物、物品都必须完全不同
+🚫 **禁止相似**: 避免使用相似的描述词、颜色、氛围
+✅ **强制差异**: 每个图片都要有独特的视觉识别点
+
+具体差异化要求：
+- 第1个图片：**引入场景** - 问题/挑战的初始状态，使用冷色调
+- 第2个图片：**核心过程** - 解决方案的关键步骤，使用暖色调，不同场景
+- 第3个图片：**结果展示** - 成功/改变后的状态，使用明亮色调，全新构图
+
+每张图片必须包含：
+1. 不同的时间/环境 (室内/室外/白天/夜晚)
+2. 不同的人物/主体数量 (单人/多人/群体)
+3. 不同的视角/构图 (近景/中景/远景)
+4. 不同的主要动作/状态 (静态/动态/交互)
+
+请直接输出 ${count} 行提示词，每行一个，不要编号：
+
+示例：
+清晨办公室中，年轻职员面对电脑屏幕困惑的表情特写
+明亮会议室里，团队围绕白板讨论解决方案的俯视图
+夕阳下的城市天台，成功人士眺望远方的背影剪影
+...
+`
+
+    const response = await callOpenAI([
+      {
+        role: 'system',
+        content: '你是专业的插画提示词专家，擅长根据文章内容生成视觉化、艺术性的图片描述。只输出简洁的提示词，不要解释。'
+      },
+      { role: 'user', content: prompt }
+    ], 0.6)
+
+    // 解析响应中的提示词
+    const prompts = response
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 10) // 过滤掉太短的行
+      .slice(0, count) // 确保数量正确
+
+    // 如果AI生成的提示词不足，补充基础提示词
+    while (prompts.length < count) {
+      prompts.push(generateFallbackPrompt(topic, prompts.length))
+    }
+
+    return prompts
+
+  } catch (error) {
+    console.error('基于内容生成图片提示词失败:', error)
+    // 降级到基础提示词生成
+    return Array.from({ length: count }, (_, i) => generateFallbackPrompt(topic, i))
+  }
+}
+
+/**
+ * 为图片提示词应用风格
+ */
+function applyImageStyle(basePrompt: string, styleConfig: ImageStyle, index: number): string {
+  // 如果是智能选择风格，根据提示词内容自动选择
+  if (styleConfig.value === 'auto') {
+    return basePrompt + ', professional illustration style, high quality, consistent visual style'
+  }
+
+  // 应用指定风格
+  return basePrompt + ', ' + styleConfig.promptTemplate + ', high quality, professional illustration, consistent style'
+}
+
+/**
+ * 生成单个图片（带重试机制）
+ */
+async function generateSingleImageWithRetry(prompt: string, maxRetries = 2): Promise<string> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await generateSingleImage(prompt)
+    } catch (error) {
+      console.error(`图片生成尝试 ${attempt + 1}/${maxRetries + 1} 失败:`, error)
+
+      if (attempt === maxRetries) {
+        throw error
+      }
+
+      // 重试前稍作延迟
+      await new Promise(resolve => setTimeout(resolve, 1000))
+    }
+  }
+
+  throw new Error('图片生成重试次数耗尽')
+}
+
+/**
+ * 生成fallback提示词
+ */
+function generateFallbackPrompt(topic?: TopicWithHistory, index = 0): string {
+  const fallbackPrompts = [
+    '现代办公场景插画，简洁专业风格',
+    '学习和成长主题插画，励志温暖风格',
+    '团队协作场景插画，现代扁平化设计',
+    '创新思维概念图，抽象艺术风格',
+    '目标达成场景插画，积极向上风格'
   ]
-  return basePrompts.slice(0, count)
+
+  // 如果有主题信息，生成相关提示词
+  if (topic) {
+    return [
+      `${topic.audienceScene.audience}在${topic.audienceScene.scene}的场景插画，简洁现代风格`,
+      `${topic.title}相关的概念图，信息图表风格`,
+      `${topic.demandPainPoint.expectation}的视觉化表达，积极风格`,
+      ...fallbackPrompts
+    ][index % 5]
+  }
+
+  return fallbackPrompts[index % fallbackPrompts.length]
+}
+
+/**
+ * 生成带风格的fallback图片
+ */
+function getFallbackImageWithStyle(prompt: string, styleConfig: ImageStyle, index: number): string {
+  // 使用不同seed确保图片多样性
+  const seed = `${Date.now()}_${index}_${Math.random().toString(36).substring(7)}`
+  return `https://picsum.photos/seed/${seed}/1024/1024.jpg`
+}
+
+/**
+ * 获取推荐的图片风格（基于主题分析）
+ */
+export function getRecommendedImageStyle(topic: TopicWithHistory): string {
+  return ContentUtils.getRecommendedImageStyle(topic)
+}
+
+/**
+ * 智能调整图片数量（基于文章长度）
+ */
+export function calculateOptimalImageCount(wordCount: number, userPreference: number): number {
+  const recommendedCount = ContentUtils.calculateImageCount(wordCount)
+  return Math.min(userPreference, recommendedCount)
+}
+
+/**
+ * 清理过期缓存和历史记录
+ */
+export async function cleanupExpiredData(): Promise<void> {
+  await ContentCache.cleanupExpiredCache()
+  console.log('数据清理完成')
 }
 
 /**
@@ -552,8 +843,10 @@ async function generateSingleImage(prompt: string): Promise<string> {
   const apiBase = process.env.SILICONFLOW_API_BASE || 'https://api.siliconflow.cn/v1'
   const model = process.env.SILICONFLOW_MODEL || 'Kwai-Kolors/Kolors'
 
+  // 如果没有API key，直接使用fallback图片
   if (!apiKey) {
-    throw new Error('SiliconFlow API key not configured')
+    console.log('SiliconFlow API key not configured, using fallback image')
+    return getFallbackImage(prompt)
   }
 
   const response = await fetch(`${apiBase}/images/generations`, {
@@ -581,23 +874,12 @@ async function generateSingleImage(prompt: string): Promise<string> {
 }
 
 /**
- * 获取fallback图片
+ * 获取fallback图片 - 使用更高质量的占位图服务
  */
 function getFallbackImage(prompt: string): string {
-  // 根据prompt关键词返回相关的Unsplash图片
-  const keywords = prompt.toLowerCase().match(/[\u4e00-\u9fa5]+|[a-z]+/gi) || []
-
-  if (keywords.some(k => k.includes('办公') || k.includes('工作'))) {
-    return 'https://source.unsplash.com/1024x1024/?office,workspace'
-  } else if (keywords.some(k => k.includes('学习') || k.includes('教育'))) {
-    return 'https://source.unsplash.com/1024x1024/?education,learning'
-  } else if (keywords.some(k => k.includes('创业') || k.includes('商业'))) {
-    return 'https://source.unsplash.com/1024x1024/?business,startup'
-  } else if (keywords.some(k => k.includes('家庭') || k.includes('生活'))) {
-    return 'https://source.unsplash.com/1024x1024/?family,lifestyle'
-  }
-
-  return 'https://source.unsplash.com/1024x1024/?technology,innovation'
+  // 使用picsum.photos，它提供更稳定的图片服务和更好的图片质量
+  const seed = Math.random().toString(36).substring(7)
+  return `https://picsum.photos/seed/${seed}/1024/1024.jpg`
 }
 
 /**
@@ -666,4 +948,216 @@ function generateUniqueAnglePrompt(topic: TopicWithHistory, index: number, total
 
   // 如果批量数量大，生成变体
   return `从${angles[index % angles.length]}，结合第${Math.floor(index / angles.length) + 1}个维度分析`
+}
+
+/**
+ * 生成文章封面图片
+ */
+export async function generateArticleCover(
+  title: string,
+  content: string,
+  templateId?: string
+): Promise<ArticleCover> {
+  try {
+    // 选择模板
+    let selectedTemplate: CoverTemplate
+    if (templateId) {
+      selectedTemplate = COVER_TEMPLATES.find(t => t.id === templateId) || COVER_TEMPLATES[0]
+    } else {
+      // 根据内容自动选择模板
+      selectedTemplate = selectCoverTemplate(title, content)
+    }
+
+    // 提取关键词和主题
+    const keywords = extractContentKeywords(title, content)
+    const mainTheme = identifyContentTheme(title, content)
+
+    // 构建封面生成提示词
+    const coverPrompt = `
+Create a professional WeChat official account cover image with the following specifications:
+
+Article Title: ${title}
+Main Theme: ${mainTheme}
+Keywords: ${keywords.slice(0, 3).join(', ')}
+Template Style: ${selectedTemplate.name}
+
+Requirements:
+- Aspect ratio: 2.35:1 (900x383px recommended)
+- Style: ${selectedTemplate.promptTemplate}
+- Background: ${selectedTemplate.backgroundColor}
+- Text placement: ${selectedTemplate.layout}
+- Include the article title: "${title}"
+- Clean, professional, eye-catching design
+- High resolution, suitable for social media
+- Text should be clearly readable and well-positioned
+
+Generate a stunning cover image that effectively represents the article content and attracts readers' attention.
+`
+
+    // 调用图片生成API（这里使用DALL-E或其他图片生成服务）
+    const imageUrl = await callImageGenerationAPI(coverPrompt)
+
+    // 创建封面对象
+    const cover: ArticleCover = {
+      url: imageUrl,
+      template: selectedTemplate.id,
+      title: title,
+      description: `AI生成的封面 - ${selectedTemplate.name}风格`,
+      prompt: coverPrompt,
+      generatedAt: new Date()
+    }
+
+    return cover
+  } catch (error) {
+    console.error('生成封面失败:', error)
+    throw new Error('封面生成失败')
+  }
+}
+
+/**
+ * 根据内容自动选择封面模板
+ */
+function selectCoverTemplate(title: string, content: string): CoverTemplate {
+  const lowerTitle = title.toLowerCase()
+  const lowerContent = content.toLowerCase()
+
+  // 商务类关键词
+  if (lowerTitle.includes('商业') || lowerTitle.includes('职场') ||
+      lowerTitle.includes('管理') || lowerTitle.includes('创业') ||
+      lowerContent.includes('商业') || lowerContent.includes('职场')) {
+    return COVER_TEMPLATES.find(t => t.id === 'professional')!
+  }
+
+  // 技术类关键词
+  if (lowerTitle.includes('科技') || lowerTitle.includes('技术') ||
+      lowerTitle.includes('AI') || lowerTitle.includes('数字化') ||
+      lowerContent.includes('科技') || lowerContent.includes('技术')) {
+    return COVER_TEMPLATES.find(t => t.id === 'tech')!
+  }
+
+  // 设计类关键词
+  if (lowerTitle.includes('设计') || lowerTitle.includes('创意') ||
+      lowerTitle.includes('艺术') || lowerTitle.includes('美学') ||
+      lowerContent.includes('设计') || lowerContent.includes('创意')) {
+    return COVER_TEMPLATES.find(t => t.id === 'creative')!
+  }
+
+  // 生活类关键词
+  if (lowerTitle.includes('生活') || lowerTitle.includes('情感') ||
+      lowerTitle.includes('健康') || lowerTitle.includes('故事') ||
+      lowerContent.includes('生活') || lowerContent.includes('情感')) {
+    return COVER_TEMPLATES.find(t => t.id === 'lifestyle')!
+  }
+
+  // 默认使用商务模板
+  return COVER_TEMPLATES[0]
+}
+
+/**
+ * 提取内容关键词
+ */
+function extractContentKeywords(title: string, content: string): string[] {
+  const allText = `${title} ${content}`
+
+  // 简单的关键词提取（实际项目中可以使用更复杂的NLP算法）
+  const keywords = allText
+    .split(/[，。！？；：\s]+/)
+    .filter(word => word.length >= 2)
+    .slice(0, 10) // 取前10个关键词
+
+  return keywords
+}
+
+/**
+ * 识别内容主题
+ */
+function identifyContentTheme(title: string, content: string): string {
+  const allText = `${title} ${content}`.toLowerCase()
+
+  if (allText.includes('科技') || allText.includes('技术') || allText.includes('AI')) {
+    return 'technology'
+  }
+  if (allText.includes('商业') || allText.includes('职场') || allText.includes('管理')) {
+    return 'business'
+  }
+  if (allText.includes('生活') || allText.includes('健康') || allText.includes('情感')) {
+    return 'lifestyle'
+  }
+  if (allText.includes('设计') || allText.includes('创意') || allText.includes('艺术')) {
+    return 'creative'
+  }
+
+  return 'general'
+}
+
+/**
+ * 调用图片生成API
+ */
+async function callImageGenerationAPI(prompt: string): Promise<string> {
+  // 这里应该调用实际的图片生成API
+  // 可以是DALL-E、Midjourney、Stable Diffusion等
+
+  try {
+    // 检查API Key是否配置
+    if (!OPENAI_API_KEY) {
+      console.warn('OPENAI_API_KEY未配置，使用占位图片')
+      return generatePlaceholderImage(prompt)
+    }
+
+    // 调用DALL-E API
+    const response = await fetch(`${OPENAI_API_BASE}/images/generations`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'dall-e-3',
+        prompt: prompt,
+        n: 1,
+        size: '1024x1792', // 接近2.35:1比例
+        quality: 'standard',
+        response_format: 'url'
+      })
+    })
+
+    if (!response.ok) {
+      console.warn(`图片生成API错误 (${response.status}): ${response.statusText}，使用占位图片`)
+      return generatePlaceholderImage(prompt)
+    }
+
+    const data = await response.json()
+    if (!data.data || !data.data[0] || !data.data[0].url) {
+      console.warn('图片生成API返回数据格式错误，使用占位图片')
+      return generatePlaceholderImage(prompt)
+    }
+
+    return data.data[0].url
+  } catch (error) {
+    console.error('图片生成API调用失败:', error)
+    return generatePlaceholderImage(prompt)
+  }
+}
+
+/**
+ * 生成占位图片
+ */
+function generatePlaceholderImage(prompt: string): string {
+  // 创建一个更简单的SVG占位图片，2.35:1比例 (900x383)
+  const svgContent = `<svg width="900" height="383" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:#667eea"/>
+        <stop offset="100%" style="stop-color:#764ba2"/>
+      </linearGradient>
+    </defs>
+    <rect width="900" height="383" fill="url(#grad)"/>
+    <text x="450" y="191" font-family="Arial" font-size="32" fill="white" text-anchor="middle">
+      AI Generated Cover
+    </text>
+  </svg>`
+
+  // 使用URL编码而不是base64，这样更兼容CSS background-image
+  const encodedSvg = encodeURIComponent(svgContent)
+  return `data:image/svg+xml,${encodedSvg}`
 }

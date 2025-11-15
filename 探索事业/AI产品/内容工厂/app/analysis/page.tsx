@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { searchWeChatArticles } from '@/lib/wechat-api'
 import { WeChatArticle } from '@/types/wechat-api'
 import { ArticleSummary, TopicInsight } from '@/types/ai-analysis'
+import * as XLSX from 'xlsx'
 
 // 历史记录类型定义
 interface SearchHistory {
@@ -290,6 +291,16 @@ export default function AnalysisPage() {
         if (aiResult.success) {
           setAiSummaries(aiResult.data.summaries)
           setAiInsights(aiResult.data.insights)
+
+          // 保存AI分析结果到localStorage，供创作页面使用
+          const analysisData = {
+            summaries: aiResult.data.summaries,
+            insights: aiResult.data.insights,
+            stats: aiResult.data.stats,
+            analysisTime: aiResult.data.analysisTime || Date.now()
+          }
+          localStorage.setItem('ai-analysis-results', JSON.stringify(analysisData))
+          console.log('AI分析结果已保存到localStorage')
         } else {
           throw new Error('AI分析返回失败结果')
         }
@@ -380,6 +391,139 @@ export default function AnalysisPage() {
         engagement: ((article.praise || 0) / article.read * 100).toFixed(0) + '%',
         url: article.url || article.short_link || '',
       }))
+  }
+
+  // 下载洞察报告
+  const downloadInsightReport = () => {
+    const insights = aiInsights.length > 0 ? aiInsights : mockAnalysisResult.insights
+    const reportData = {
+      keyword: keyword,
+      generatedAt: new Date().toLocaleString('zh-CN'),
+      articles: {
+        total: stats.totalArticles,
+        withPraise: stats.withPraise,
+        avgReads: stats.avgReads,
+        avgLikes: stats.avgLikes
+      },
+      insights: insights.map((insight, index) => ({
+        rank: index + 1,
+        title: insight.title,
+        description: insight.description,
+        confidence: insight.confidence,
+        tags: insight.tags || [],
+        decisionStage: insight.decisionStage?.stage || '',
+        audience: insight.audienceScene?.audience || '',
+        scene: insight.audienceScene?.scene || '',
+        emotionalPain: insight.demandPainPoint?.emotionalPain || '',
+        realisticPain: insight.demandPainPoint?.realisticPain || '',
+        expectation: insight.demandPainPoint?.expectation || ''
+      })),
+      topArticles: {
+        mostLiked: topLikesArticles,
+        highestEngagement: topEngagementArticles
+      }
+    }
+
+    // 创建文本内容
+    let content = `公众号选题洞察报告\n`
+    content += `关键词：${reportData.keyword}\n`
+    content += `生成时间：${reportData.generatedAt}\n\n`
+
+    content += `【文章统计概览】\n`
+    content += `总文章数：${reportData.articles.total}篇\n`
+    content += `有点赞数：${reportData.articles.withPraise}篇\n`
+    content += `平均阅读量：${reportData.articles.avgReads}\n`
+    content += `平均点赞数：${reportData.articles.avgLikes}\n\n`
+
+    content += `【选题洞察】\n`
+    reportData.insights.forEach(insight => {
+      content += `\n${insight.rank}. ${insight.title}\n`
+      content += `   置信度：${insight.confidence}%\n`
+      content += `   描述：${insight.description}\n`
+      if (insight.tags.length > 0) {
+        content += `   标签：${insight.tags.join(', ')}\n`
+      }
+      content += `   决策阶段：${insight.decisionStage}\n`
+      content += `   目标人群：${insight.audience}\n`
+      content += `   使用场景：${insight.scene}\n`
+      content += `   情感痛点：${insight.emotionalPain}\n`
+      content += `   现实痛点：${insight.realisticPain}\n`
+      content += `   期望需求：${insight.expectation}\n`
+    })
+
+    content += `\n【热门文章分析】\n`
+    content += `点赞最高文章：\n`
+    reportData.topArticles.mostLiked.forEach((article, index) => {
+      content += `${index + 1}. ${article.title}\n`
+      content += `   点赞：${article.likes} | 阅读：${article.reads} | 互动率：${article.engagement}\n`
+    })
+
+    content += `\n互动率最高文章：\n`
+    reportData.topArticles.highestEngagement.forEach((article, index) => {
+      content += `${index + 1}. ${article.title}\n`
+      content += `   点赞：${article.likes} | 阅读：${article.reads} | 互动率：${article.engagement}\n`
+    })
+
+    // 创建下载
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `选题洞察报告_${keyword}_${new Date().toISOString().split('T')[0]}.txt`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  // 下载文章原始数据
+  const downloadRawData = () => {
+    const allArticles = articles || []
+
+    if (allArticles.length === 0) {
+      alert('暂无数据可下载')
+      return
+    }
+
+    // 创建Excel数据
+    const headers = ['序号', '标题', '公众号名称', '作者', '阅读量', '点赞数', '互动率', '发布时间', '链接']
+    const excelData = [
+      headers,
+      ...allArticles.map((article, index) => [
+        index + 1,
+        article.title || '',
+        article.wx_name || '',
+        '', // 作者字段留空，因为API中没有提供作者名称数据
+        article.read || 0,
+        article.praise || 0,
+        article.read > 0 ? `${((article.praise || 0) / article.read * 100).toFixed(1)}%` : '0%',
+        article.publish_time ? new Date(article.publish_time * 1000).toLocaleString('zh-CN') : '',
+        article.url || article.short_link || ''
+      ])
+    ]
+
+    // 创建工作簿和工作表
+    const ws = XLSX.utils.aoa_to_sheet(excelData)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, '公众号文章数据')
+
+    // 设置列宽
+    const colWidths = [
+      { wch: 8 },   // 序号
+      { wch: 50 },  // 标题
+      { wch: 20 },  // 公众号名称
+      { wch: 15 },  // 作者
+      { wch: 12 },  // 阅读量
+      { wch: 12 },  // 点赞数
+      { wch: 12 },  // 互动率
+      { wch: 20 },  // 发布时间
+      { wch: 50 }   // 链接
+    ]
+    ws['!cols'] = colWidths
+
+    // 生成Excel文件并下载
+    const fileName = `公众号文章数据_${keyword}_${new Date().toISOString().split('T')[0]}.xlsx`
+    XLSX.writeFile(wb, fileName)
   }
 
   const stats = calculateStats()
@@ -701,7 +845,10 @@ export default function AnalysisPage() {
                   <RefreshCw className="w-4 h-4 mr-2" />
                   重新生成
                 </button>
-                <button className="px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center">
+                <button
+                  onClick={downloadInsightReport}
+                  className="px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center"
+                >
                   <Download className="w-4 h-4 mr-2" />
                   下载报告
                 </button>
@@ -830,6 +977,121 @@ export default function AnalysisPage() {
               </Link>
             </div>
           </div>
+
+          {/* 文章原始数据下载模块 */}
+          {articles && articles.length > 0 && (
+            <div className="mt-6 bg-white rounded-xl p-6 border border-gray-200">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-gray-900 flex items-center">
+                  <Download className="w-5 h-5 mr-2 text-green-500" />
+                  文章原始数据
+                </h2>
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm text-gray-500">
+                    共 {articles.length} 篇文章
+                  </span>
+                  <button
+                    onClick={downloadRawData}
+                    className="px-3 py-1.5 text-sm bg-green-500 text-white rounded-lg hover:bg-green-600 flex items-center"
+                  >
+                    <Download className="w-4 h-4 mr-1" />
+                    下载Excel
+                  </button>
+                </div>
+              </div>
+              <p className="text-sm text-gray-600 mb-4">
+                下载所有公众号文章的详细数据，包括标题、作者、阅读量、点赞数、发布时间等信息，支持Excel打开。
+              </p>
+
+              {/* 数据预览表格 */}
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        标题
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        公众号
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        作者
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        阅读量
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        点赞数
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        互动率
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        发布时间
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {articles.slice(0, 10).map((article, index) => (
+                      <tr key={index} className="hover:bg-gray-50">
+                        <td className="px-4 py-3">
+                          <div className="max-w-xs truncate" title={article.title}>
+                            <span className="text-sm font-medium text-gray-900">
+                              {article.title}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-sm text-gray-600">
+                            {article.wx_name || '-'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-sm text-gray-600">
+                            {article.ip_wording || '-'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-sm text-gray-900">
+                            {(article.read || 0).toLocaleString()}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-sm text-gray-900">
+                            {(article.praise || 0).toLocaleString()}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-sm text-gray-900">
+                            {article.read > 0
+                              ? `${((article.praise || 0) / article.read * 100).toFixed(1)}%`
+                              : '-'
+                            }
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-sm text-gray-600">
+                            {article.publish_time
+                              ? new Date(article.publish_time * 1000).toLocaleDateString('zh-CN')
+                              : '-'
+                            }
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {articles.length > 10 && (
+                <div className="mt-4 text-center">
+                  <p className="text-sm text-gray-500">
+                    仅显示前10条数据，完整数据请下载Excel文件查看
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

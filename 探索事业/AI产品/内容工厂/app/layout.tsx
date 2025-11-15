@@ -18,7 +18,7 @@ export default function RootLayout({
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
-      <body className="font-sans antialiased">
+      <body className="font-sans antialiased" suppressHydrationWarning>
         <div className="flex h-screen bg-gray-50">
           <Sidebar />
           <main className="flex-1 overflow-y-auto">

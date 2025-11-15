@@ -16,6 +16,11 @@ function generateId(): string {
  * 从分析页面获取最新的选题数据
  */
 export function syncTopicsFromAnalysis(): TopicWithHistory[] {
+  // 检查是否在客户端环境
+  if (typeof window === 'undefined') {
+    return []
+  }
+
   try {
     // 获取localStorage中的分析数据
     const analysisData = localStorage.getItem('ai-analysis-results')
@@ -47,16 +52,27 @@ export function syncTopicsFromAnalysis(): TopicWithHistory[] {
  * 获取本地存储的选题历史（按时间倒序）
  */
 export function getLocalTopicHistory(): TopicWithHistory[] {
+  // 检查是否在客户端环境
+  if (typeof window === 'undefined') {
+    return []
+  }
+
   try {
     const topicsData = localStorage.getItem('topic-history')
     if (!topicsData) return []
 
     const topics = JSON.parse(topicsData)
 
+    // 修复日期反序列化问题
+    const processedTopics = topics.map((topic: any) => ({
+      ...topic,
+      createdAt: new Date(topic.createdAt)
+    }))
+
     // 按时间倒序排列
-    return topics
+    return processedTopics
       .sort((a: TopicWithHistory, b: TopicWithHistory) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        b.createdAt.getTime() - a.createdAt.getTime()
       )
   } catch (error) {
     console.error('获取选题历史失败:', error)
@@ -68,6 +84,11 @@ export function getLocalTopicHistory(): TopicWithHistory[] {
  * 保存选题到本地历史
  */
 export function saveTopicsToLocal(topics: TopicWithHistory[]): void {
+  // 检查是否在客户端环境
+  if (typeof window === 'undefined') {
+    return
+  }
+
   try {
     // 合并现有历史和新数据
     const existingTopics = getLocalTopicHistory()
@@ -80,7 +101,7 @@ export function saveTopicsToLocal(topics: TopicWithHistory[]): void {
 
     // 按时间倒序排列
     const sortedTopics = uniqueTopics
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
 
     localStorage.setItem('topic-history', JSON.stringify(sortedTopics))
     console.log(`保存了 ${sortedTopics.length} 个选题到历史记录`)
@@ -104,7 +125,7 @@ export function mergeTopicsWithHistory(): TopicWithHistory[] {
 
   // 按时间倒序排列
   const sortedTopics = uniqueTopics
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
 
   // 保存合并后的数据
   saveTopicsToLocal(sortedTopics)
@@ -116,6 +137,11 @@ export function mergeTopicsWithHistory(): TopicWithHistory[] {
  * 设置实时数据同步监听器
  */
 export function setupDataSyncListener(callback: (topics: TopicWithHistory[]) => void): () => void {
+  // 检查是否在客户端环境
+  if (typeof window === 'undefined') {
+    return () => {} // 返回空的清理函数
+  }
+
   const handleStorageChange = (e: StorageEvent) => {
     if (e.key === 'ai-analysis-results') {
       console.log('检测到分析页面数据更新，同步选题...')
@@ -127,22 +153,26 @@ export function setupDataSyncListener(callback: (topics: TopicWithHistory[]) => 
   // 监听storage事件
   window.addEventListener('storage', handleStorageChange)
 
-  // 定期检查更新（每30秒）
+  // 定期检查更新（每10秒，提高响应速度）
   const intervalId = setInterval(() => {
     const currentAnalysisData = localStorage.getItem('ai-analysis-results')
     if (currentAnalysisData) {
-      const parsed = JSON.parse(currentAnalysisData)
-      const lastSyncTime = localStorage.getItem('last-sync-time')
+      try {
+        const parsed = JSON.parse(currentAnalysisData)
+        const lastSyncTime = localStorage.getItem('last-sync-time')
 
-      // 如果有新的分析数据且距离上次同步超过1分钟，则重新同步
-      if (!lastSyncTime || (parsed.analysisTime && parseInt(lastSyncTime) < parsed.analysisTime)) {
-        console.log('定期检查发现新数据，开始同步...')
-        const mergedTopics = mergeTopicsWithHistory()
-        callback(mergedTopics)
-        localStorage.setItem('last-sync-time', Date.now().toString())
+        // 如果有新的分析数据且距离上次同步超过1分钟，则重新同步
+        if (!lastSyncTime || (parsed.analysisTime && parseInt(lastSyncTime) < parsed.analysisTime)) {
+          console.log('定期检查发现新数据，开始同步...')
+          const mergedTopics = mergeTopicsWithHistory()
+          callback(mergedTopics)
+          localStorage.setItem('last-sync-time', Date.now().toString())
+        }
+      } catch (error) {
+        console.error('解析分析数据失败:', error)
       }
     }
-  }, 30000)
+  }, 10000)
 
   // 返回清理函数
   return () => {
@@ -156,8 +186,24 @@ export function setupDataSyncListener(callback: (topics: TopicWithHistory[]) => 
  */
 export function refreshTopicsData(): TopicWithHistory[] {
   console.log('手动刷新选题数据...')
-  const mergedTopics = mergeTopicsWithHistory()
+
+  // 检查是否在客户端环境
+  if (typeof window === 'undefined') {
+    return []
+  }
+
+  // 强制更新同步时间戳
   localStorage.setItem('last-sync-time', Date.now().toString())
+
+  // 重新合并数据
+  const mergedTopics = mergeTopicsWithHistory()
+
+  // 触发一个自定义事件来强制更新所有监听器
+  window.dispatchEvent(new CustomEvent('topics-data-refreshed', {
+    detail: { topics: mergedTopics, timestamp: Date.now() }
+  }))
+
+  console.log('手动刷新完成，返回', mergedTopics.length, '个选题')
   return mergedTopics
 }
 
@@ -165,6 +211,11 @@ export function refreshTopicsData(): TopicWithHistory[] {
  * 清理过期的选题历史（保留7天）
  */
 export function cleanupExpiredTopics(): void {
+  // 检查是否在客户端环境
+  if (typeof window === 'undefined') {
+    return
+  }
+
   try {
     const topics = getLocalTopicHistory()
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
@@ -186,6 +237,11 @@ export function cleanupExpiredTopics(): void {
  * 获取最后同步时间
  */
 export function getLastSyncTime(): Date | null {
+  // 检查是否在客户端环境
+  if (typeof window === 'undefined') {
+    return null
+  }
+
   try {
     const lastSyncTime = localStorage.getItem('last-sync-time')
     return lastSyncTime ? new Date(parseInt(lastSyncTime)) : null
