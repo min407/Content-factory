@@ -1,5 +1,5 @@
 {
-  "buildCommand": "NODE_OPTIONS='--max-old-space-size=4096' npm run build --webpack",
+  "buildCommand": "NODE_OPTIONS='--max-old-space-size=4096' npm run build",
   "outputDirectory": ".next",
   "framework": "nextjs",
   "env": {
@@ -9,8 +9,7 @@
   "build": {
     "env": {
       "NEXT_TELEMETRY_DISABLED": "1",
-      "NODE_ENV": "production",
-      "NEXT_BUILD_WORKERS": "1"
+      "NODE_ENV": "production"
     }
   },
   "functions": {
