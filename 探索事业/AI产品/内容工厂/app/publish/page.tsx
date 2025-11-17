@@ -30,6 +30,8 @@ import {
   RefreshCw
 } from 'lucide-react'
 import Link from 'next/link'
+import DashboardLayout from '@/components/DashboardLayout'
+import { withAuth } from '@/lib/auth-context'
 import { Draft } from '@/types/ai-analysis'
 import { DraftManager } from '@/lib/content-management'
 import WechatPublishModal from '@/components/WechatPublishModal'
@@ -46,7 +48,7 @@ const platformConfig = {
   wechat: { label: '公众号', color: 'bg-green-500' }
 }
 
-export default function PublishPage() {
+function PublishPageContent() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
   const [selectedArticles, setSelectedArticles] = useState<string[]>([])
@@ -550,3 +552,12 @@ export default function PublishPage() {
     </div>
   )
 }
+
+// 包装需要登录的页面
+export default withAuth(function PublishPage() {
+  return (
+    <DashboardLayout>
+      <PublishPageContent />
+    </DashboardLayout>
+  )
+})

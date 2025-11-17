@@ -1,8 +1,23 @@
 import { WeChatArticleApiResponse, WeChatArticleSearchParams } from '@/types/wechat-api'
+import { ApiConfigManager } from './api-config'
+import { ApiProvider } from '@/types/api-config'
 
-// API配置
-const API_URL = 'https://www.dajiala.com/fbmain/monitor/v3/kw_search'
-const API_KEY = process.env.NEXT_PUBLIC_XIAOHONGSHU_SEARCH_API_KEY || ''
+/**
+ * 获取微信搜索API配置
+ */
+function getWechatSearchConfig() {
+  const apiKey = ApiConfigManager.getApiKey(ApiProvider.WECHAT_SEARCH)
+  const apiBase = ApiConfigManager.getApiBase(ApiProvider.WECHAT_SEARCH)
+
+  if (!apiKey) {
+    throw new Error('微信搜索API密钥未配置，请在设置中配置API密钥')
+  }
+
+  return {
+    apiKey,
+    apiBase: apiBase || 'https://www.dajiala.com/fbmain/monitor/v3/kw_search'
+  }
+}
 
 /**
  * 搜索公众号文章
@@ -12,13 +27,19 @@ const API_KEY = process.env.NEXT_PUBLIC_XIAOHONGSHU_SEARCH_API_KEY || ''
 export async function searchWeChatArticles(
   params: Omit<WeChatArticleSearchParams, 'key'>
 ): Promise<WeChatArticleApiResponse> {
+  const config = getWechatSearchConfig()
+
+  if (!config.apiKey) {
+    throw new Error('微信搜索API密钥未配置，请在设置中配置API密钥')
+  }
+
   const requestBody: WeChatArticleSearchParams = {
     kw: params.kw,
     sort_type: params.sort_type || 1,
     mode: params.mode || 1,
     period: params.period || 7,
     page: params.page || 1,
-    key: API_KEY,
+    key: config.apiKey,
     any_kw: params.any_kw || '',
     ex_kw: params.ex_kw || '',
     verifycode: params.verifycode || '',
@@ -26,7 +47,7 @@ export async function searchWeChatArticles(
   }
 
   try {
-    const response = await fetch(API_URL, {
+    const response = await fetch(config.apiBase, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

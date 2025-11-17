@@ -15,10 +15,25 @@ import {
 } from '@/types/ai-analysis'
 import { ContentCache, IMAGE_STYLES, IMAGE_RATIOS, COVER_TEMPLATES, ContentUtils } from './content-cache'
 
-// OpenAI配置从环境变量读取
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY || ''
-const OPENAI_API_BASE = process.env.OPENAI_API_BASE || 'https://api.openai.com/v1'
-const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o'
+import { ApiConfigManager } from './api-config'
+import { ApiProvider } from '@/types/api-config'
+
+/**
+ * 获取OpenAI配置
+ */
+function getOpenAIConfig() {
+  // 优先使用用户配置的API密钥
+  const apiKey = ApiConfigManager.getApiKey(ApiProvider.OPENROUTER)
+  const apiBase = ApiConfigManager.getApiBase(ApiProvider.OPENROUTER) || 'https://openrouter.ai/api/v1'
+  const model = ApiConfigManager.getModel(ApiProvider.OPENROUTER) || 'anthropic/claude-3.5-sonnet'
+
+  // 如果没有用户配置，则回退到环境变量
+  return {
+    apiKey: apiKey || process.env.OPENAI_API_KEY || '',
+    apiBase: apiBase,
+    model: model
+  }
+}
 
 /**
  * 调用OpenAI API
@@ -27,18 +42,20 @@ async function callOpenAI(
   messages: Array<{ role: string; content: string }>,
   temperature = 0.7
 ): Promise<string> {
-  if (!OPENAI_API_KEY) {
-    throw new Error('OPENAI_API_KEY 未配置')
+  const config = getOpenAIConfig()
+
+  if (!config.apiKey) {
+    throw new Error('API密钥未配置，请在设置中配置OpenRouter API密钥')
   }
 
-  const response = await fetch(OPENAI_API_BASE + '/chat/completions', {
+  const response = await fetch(config.apiBase + '/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + OPENAI_API_KEY,
+      'Authorization': 'Bearer ' + config.apiKey,
     },
     body: JSON.stringify({
-      model: OPENAI_MODEL,
+      model: config.model,
       messages,
       temperature,
       response_format: { type: 'text' },
@@ -986,9 +1003,10 @@ export async function cleanupExpiredData(): Promise<void> {
  * 生成单个AI图片（使用SiliconFlow API）
  */
 async function generateSingleImage(prompt: string): Promise<string> {
-  const apiKey = process.env.SILICONFLOW_API_KEY
-  const apiBase = process.env.SILICONFLOW_API_BASE || 'https://api.siliconflow.cn/v1'
-  const model = process.env.SILICONFLOW_MODEL || 'Kwai-Kolors/Kolors'
+  // 优先使用用户配置的API密钥
+  const apiKey = ApiConfigManager.getApiKey(ApiProvider.SILICONFLOW)
+  const apiBase = ApiConfigManager.getApiBase(ApiProvider.SILICONFLOW) || 'https://api.siliconflow.cn/v1'
+  const model = ApiConfigManager.getModel(ApiProvider.SILICONFLOW) || 'Kwai-Kolors/Kolors'
 
   // 如果没有API key，直接使用fallback图片
   if (!apiKey) {
@@ -1226,17 +1244,19 @@ async function callImageGenerationAPI(prompt: string): Promise<string> {
   // 可以是DALL-E、Midjourney、Stable Diffusion等
 
   try {
+    const openaiConfig = getOpenAIConfig()
+
     // 检查API Key是否配置
-    if (!OPENAI_API_KEY) {
-      console.warn('OPENAI_API_KEY未配置，使用占位图片')
+    if (!openaiConfig.apiKey) {
+      console.warn('OpenAI API Key未配置，使用占位图片')
       return generatePlaceholderImage(prompt)
     }
 
     // 调用DALL-E API
-    const response = await fetch(OPENAI_API_BASE + '/images/generations', {
+    const response = await fetch(openaiConfig.apiBase + '/images/generations', {
       method: 'POST',
       headers: {
-        'Authorization': 'Bearer ' + OPENAI_API_KEY,
+        'Authorization': 'Bearer ' + openaiConfig.apiKey,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({

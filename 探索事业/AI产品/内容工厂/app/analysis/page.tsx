@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Search, Loader2, History, AlertCircle, Award, BarChart3, Eye, Heart, TrendingUp, Users, Zap, Hash, Clock, Sparkles, RefreshCw, Download, PenTool, ChevronRight, X, ExternalLink, BarChart, Check } from 'lucide-react'
 import Link from 'next/link'
+import DashboardLayout from '@/components/DashboardLayout'
+import { withAuth } from '@/lib/auth-context'
 import { searchWeChatArticles } from '@/lib/wechat-api'
 import { WeChatArticle } from '@/types/wechat-api'
 import { ArticleSummary, TopicInsight } from '@/types/ai-analysis'
@@ -173,7 +175,7 @@ const chartData = [
   { name: '20k+', value: 27 },
 ]
 
-export default function AnalysisPage() {
+function AnalysisPageContent() {
   const [keyword, setKeyword] = useState('')
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [showResult, setShowResult] = useState(false)
@@ -1254,3 +1256,12 @@ export default function AnalysisPage() {
     </div>
   )
 }
+
+// 包装需要登录的页面
+export default withAuth(function AnalysisPage() {
+  return (
+    <DashboardLayout>
+      <AnalysisPageContent />
+    </DashboardLayout>
+  )
+})

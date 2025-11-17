@@ -35,6 +35,8 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
+import DashboardLayout from '@/components/DashboardLayout'
+import { withAuth } from '@/lib/auth-context'
 
 // 导入新的类型和服务
 import { TopicWithHistory, GeneratedArticle } from '@/types/ai-analysis'
@@ -79,7 +81,7 @@ const getAspectRatio = (ratio: string): string => {
   return ratioMap[ratio] || '4/3'
 }
 
-export default function CreatePage() {
+function CreatePageContent() {
   const searchParams = useSearchParams()
   const draftId = searchParams?.get('draft')
 
@@ -2478,3 +2480,12 @@ export default function CreatePage() {
     </div>
   )
 }
+
+// 包装需要登录的页面
+export default withAuth(function CreatePage() {
+  return (
+    <DashboardLayout>
+      <CreatePageContent />
+    </DashboardLayout>
+  )
+})

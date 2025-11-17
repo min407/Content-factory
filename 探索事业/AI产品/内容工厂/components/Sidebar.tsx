@@ -10,44 +10,54 @@ import {
   Settings,
   BarChart3,
   FileText,
-  Zap
+  Zap,
+  User,
+  LogIn,
+  LogOut
 } from 'lucide-react'
+import { useAuth, AuthStatus } from '@/lib/auth-context'
 
 const menuItems = [
   {
     href: '/',
     label: '仪表盘',
     icon: LayoutDashboard,
-    description: '总览和数据统计'
+    description: '总览和数据统计',
+    requireAuth: false
   },
   {
     href: '/analysis',
     label: '选题分析',
     icon: Search,
-    description: '关键词分析与洞察'
+    description: '关键词分析与洞察',
+    requireAuth: true
   },
   {
     href: '/create',
     label: '内容创作',
     icon: PenTool,
-    description: 'AI智能创作'
+    description: 'AI智能创作',
+    requireAuth: true
   },
   {
     href: '/publish',
     label: '发布管理',
     icon: Send,
-    description: '文章管理与发布'
+    description: '文章管理与发布',
+    requireAuth: true
   },
   {
-    href: '/settings',
-    label: '设置',
+    href: '/api-settings',
+    label: 'API配置',
     icon: Settings,
-    description: 'API配置与系统设置'
+    description: 'API密钥管理',
+    requireAuth: true
   },
 ]
 
-export default function Sidebar() {
+export function Sidebar() {
   const pathname = usePathname()
+  const { isAuthenticated, user, logout, isLoading } = useAuth()
 
   return (
     <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
@@ -67,7 +77,9 @@ export default function Sidebar() {
       {/* 导航菜单 */}
       <nav className="flex-1 p-4">
         <ul className="space-y-2">
-          {menuItems.map((item) => {
+          {menuItems
+            .filter(item => !item.requireAuth || isAuthenticated)
+            .map((item) => {
             const Icon = item.icon
             const isActive = pathname === item.href ||
                            (item.href !== '/' && pathname.startsWith(item.href))
@@ -96,6 +108,69 @@ export default function Sidebar() {
             )
           })}
         </ul>
+
+        {/* 认证相关操作 */}
+        <div className="mt-6 pt-6 border-t border-gray-200">
+          {isLoading ? (
+            <div className="flex items-center space-x-3 px-4 py-3">
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+              <span className="text-sm text-gray-600">检查中...</span>
+            </div>
+          ) : isAuthenticated ? (
+            <div className="space-y-2">
+              {/* 用户信息 */}
+              <div className="px-4 py-3 bg-gray-50 rounded-lg">
+                <div className="flex items-center space-x-3">
+                  {user?.avatar ? (
+                    <img
+                      src={user.avatar}
+                      alt={user.username}
+                      className="w-8 h-8 rounded-full"
+                    />
+                  ) : (
+                    <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
+                      <User className="w-4 h-4 text-white" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">
+                      {user?.username || '未知用户'}
+                    </p>
+                    <p className="text-xs text-gray-500 truncate">
+                      {user?.email || ''}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 登出按钮 */}
+              <button
+                onClick={() => logout()}
+                className="w-full flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-lg transition-all border-l-4 border-transparent"
+              >
+                <LogOut className="w-5 h-5 flex-shrink-0" />
+                <span className="font-medium">退出登录</span>
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Link
+                href="/login"
+                className="flex items-center space-x-3 px-4 py-3 text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-lg transition-all border-l-4 border-transparent"
+              >
+                <LogIn className="w-5 h-5 flex-shrink-0" />
+                <span className="font-medium">登录</span>
+              </Link>
+              <Link
+                href="/register"
+                className="flex items-center space-x-3 px-4 py-3 text-blue-600 hover:bg-blue-50 rounded-lg transition-all border-l-4 border-transparent"
+              >
+                <User className="w-5 h-5 flex-shrink-0" />
+                <span className="font-medium">注册</span>
+              </Link>
+            </div>
+          )}
+        </div>
       </nav>
 
       {/* 底部信息 */}
@@ -124,3 +199,6 @@ export default function Sidebar() {
     </aside>
   )
 }
+
+// 向后兼容的默认导出
+export default Sidebar

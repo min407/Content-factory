@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
-import Sidebar from '@/components/Sidebar'
+import { AuthProvider } from '@/lib/auth-context'
 
 export const metadata: Metadata = {
   title: '内容工厂Agent',
@@ -19,12 +19,9 @@ export default function RootLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
       <body className="font-sans antialiased" suppressHydrationWarning>
-        <div className="flex h-screen bg-gray-50">
-          <Sidebar />
-          <main className="flex-1 overflow-y-auto">
-            {children}
-          </main>
-        </div>
+        <AuthProvider>
+          {children}
+        </AuthProvider>
       </body>
     </html>
   )

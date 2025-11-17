@@ -5,21 +5,35 @@ import {
   PublishParams,
   PublishResult
 } from '@/types/wechat-publish'
+import { ApiConfigManager } from './api-config'
+import { ApiProvider } from '@/types/api-config'
 
-// API配置
-const API_BASE = 'https://wx.limyai.com/api/openapi'
-const API_KEY = 'xhs_ece2ac77bf86495442d51095ac9ffcc1'
+/**
+ * 获取微信发布API配置
+ */
+function getWechatPublishConfig() {
+  const apiKey = ApiConfigManager.getApiKey(ApiProvider.WECHAT_PUBLISH)
+  const apiBase = ApiConfigManager.getApiBase(ApiProvider.WECHAT_PUBLISH) || 'https://wx.limyai.com/api/openapi'
+
+  // 如果没有用户配置，则使用默认配置
+  return {
+    apiKey: apiKey || 'xhs_ece2ac77bf86495442d51095ac9ffcc1',
+    apiBase: apiBase
+  }
+}
 
 /**
  * 获取公众号列表
  * @returns Promise<WechatAccount[]>
  */
 export async function getWechatAccounts(): Promise<WechatAccount[]> {
+  const config = getWechatPublishConfig()
+
   try {
-    const response = await fetch(`${API_BASE}/wechat-accounts`, {
+    const response = await fetch(`${config.apiBase}/wechat-accounts`, {
       method: 'POST',
       headers: {
-        'X-API-Key': API_KEY,
+        'X-API-Key': config.apiKey,
         'Content-Type': 'application/json'
       }
     })
@@ -47,11 +61,13 @@ export async function getWechatAccounts(): Promise<WechatAccount[]> {
  * @returns Promise<PublishResult>
  */
 export async function publishToWechat(params: PublishParams): Promise<PublishResult> {
+  const config = getWechatPublishConfig()
+
   try {
-    const response = await fetch(`${API_BASE}/wechat-publish`, {
+    const response = await fetch(`${config.apiBase}/wechat-publish`, {
       method: 'POST',
       headers: {
-        'X-API-Key': API_KEY,
+        'X-API-Key': config.apiKey,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(params)

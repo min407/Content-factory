@@ -4,22 +4,43 @@ import {
   XiaohongshuNote,
   XiaohongshuDetailResponse
 } from '@/types/xiaohongshu-api'
+import { ApiConfigManager } from './api-config'
+import { ApiProvider } from '@/types/api-config'
 
-// API配置（从环境变量读取）
-// 注意：使用 NEXT_PUBLIC_ 前缀以便在客户端访问
-const API_URL = process.env.NEXT_PUBLIC_XIAOHONGSHU_SEARCH_API_BASE || 'https://www.dajiala.com/fbmain/monitor/v3/xhs'
-const API_KEY = process.env.NEXT_PUBLIC_XIAOHONGSHU_SEARCH_API_KEY || ''
+/**
+ * 获取小红书搜索API配置
+ */
+function getXiaohongshuSearchConfig() {
+  const apiKey = ApiConfigManager.getApiKey(ApiProvider.XIAOHONGSHU_SEARCH)
+  const apiBase = ApiConfigManager.getApiBase(ApiProvider.XIAOHONGSHU_SEARCH)
 
-// 详情接口配置（哼哼猫API，从环境变量读取）
-// 注意：详情接口与搜索接口使用相同的API密钥
-const DETAIL_API_URL = process.env.NEXT_PUBLIC_XIAOHONGSHU_DETAIL_API_BASE || 'https://api.meowload.net/openapi/extract/post'
-const DETAIL_API_KEY = process.env.NEXT_PUBLIC_XIAOHONGSHU_DETAIL_API_KEY || ''
+  if (!apiKey) {
+    throw new Error('小红书搜索API密钥未配置，请在设置中配置API密钥')
+  }
 
-// 检查必需的环境变量
-if (!API_KEY) {
-  console.warn('⚠️ NEXT_PUBLIC_XIAOHONGSHU_SEARCH_API_KEY 未设置，小红书搜索和详情功能可能无法使用')
-  console.warn('当前 API_KEY 值:', API_KEY)
+  return {
+    apiKey,
+    apiBase: apiBase || 'https://www.dajiala.com/fbmain/monitor/v3/xhs'
+  }
 }
+
+/**
+ * 获取小红书详情API配置
+ */
+function getXiaohongshuDetailConfig() {
+  const apiKey = ApiConfigManager.getApiKey(ApiProvider.XIAOHONGSHU_DETAIL)
+  const apiBase = ApiConfigManager.getApiBase(ApiProvider.XIAOHONGSHU_DETAIL)
+
+  if (!apiKey) {
+    throw new Error('小红书详情API密钥未配置，请在设置中配置API密钥')
+  }
+
+  return {
+    apiKey,
+    apiBase: apiBase || 'https://api.meowload.net/openapi/extract/post'
+  }
+}
+
 
 /**
  * 搜索小红书笔记
@@ -30,6 +51,11 @@ export async function searchXiaohongshuNotes(
   params: Omit<XiaohongshuSearchParams, 'key'>
 ): Promise<XiaohongshuApiResponse> {
   const startTime = Date.now()
+  const config = getXiaohongshuSearchConfig()
+
+  if (!config.apiKey) {
+    throw new Error('小红书搜索API密钥未配置，请在设置中配置API密钥')
+  }
 
   console.log('\n' + '='.repeat(80))
   console.log('🔍 [搜索接口] 开始搜索小红书笔记')
@@ -37,10 +63,10 @@ export async function searchXiaohongshuNotes(
   console.log('页码:', params.page || 1)
   console.log('排序:', params.sort || 'general')
   console.log('笔记类型:', params.note_type || 'image')
-  console.log('API地址:', API_URL)
+  console.log('API地址:', config.apiBase)
 
   const requestBody: XiaohongshuSearchParams = {
-    key: API_KEY,
+    key: config.apiKey,
     type: params.type || 1,
     keyword: params.keyword,
     page: params.page || 1,
@@ -57,7 +83,7 @@ export async function searchXiaohongshuNotes(
     console.log('⏰ 发起POST请求...')
     const fetchStartTime = Date.now()
 
-    const response = await fetch(API_URL, {
+    const response = await fetch(config.apiBase, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -189,12 +215,17 @@ export async function searchMultiplePages(
  */
 export async function getNoteDetail(url: string): Promise<XiaohongshuDetailResponse> {
   const requestStartTime = Date.now()
+  const config = getXiaohongshuDetailConfig()
+
+  if (!config.apiKey) {
+    throw new Error('小红书详情API密钥未配置，请在设置中配置API密钥')
+  }
 
   console.log('\n┌─────────────────────────────────────────────────────────────')
   console.log('│ 🌐 [详情接口] 准备发起请求（哼哼猫API）')
   console.log('│ 目标URL:', url)
-  console.log('│ API地址:', DETAIL_API_URL)
-  console.log('│ API密钥:', DETAIL_API_KEY)
+  console.log('│ API地址:', config.apiBase)
+  console.log('│ API密钥:', config.apiKey)
 
   try {
     // 构建请求体
@@ -207,11 +238,11 @@ export async function getNoteDetail(url: string): Promise<XiaohongshuDetailRespo
     console.log('│ ⏰ 发起HTTP请求...')
 
     const fetchStartTime = Date.now()
-    const response = await fetch(DETAIL_API_URL, {
+    const response = await fetch(config.apiBase, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': DETAIL_API_KEY,
+        'x-api-key': config.apiKey,
         'accept-language': 'zh' // 使用中文错误信息
       },
       body: JSON.stringify(requestBody)
@@ -296,11 +327,12 @@ export async function getNoteDetail(url: string): Promise<XiaohongshuDetailRespo
  */
 export async function fetchNotesWithDetails(notes: XiaohongshuNote[]): Promise<XiaohongshuNote[]> {
   const startTime = Date.now()
+  const config = getXiaohongshuDetailConfig()
   console.log('='.repeat(80))
   console.log(`📝 [批量获取详情] 开始时间: ${new Date().toLocaleString()}`)
   console.log(`📝 [批量获取详情] 需要获取 ${notes.length} 条笔记的详情`)
-  console.log(`📝 [批量获取详情] API配置: ${DETAIL_API_URL}`)
-  console.log(`📝 [批量获取详情] API密钥: ${DETAIL_API_KEY}`)
+  console.log(`📝 [批量获取详情] API配置: ${config.apiBase}`)
+  console.log(`📝 [批量获取详情] API密钥: ${config.apiKey}`)
   console.log('='.repeat(80))
 
   let successCount = 0
