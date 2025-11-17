@@ -101,8 +101,8 @@ export async function searchWeChatArticles(
     }
 
     console.log('✅ [微信搜索API] 搜索成功，返回数据:', {
-      total: data.data?.total || 0,
-      currentCount: data.data?.list?.length || 0,
+      total: data.total || 0,
+      currentCount: data.data?.length || 0,
       userId: userId || 'default'
     })
 

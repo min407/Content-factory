@@ -119,7 +119,7 @@ export async function publishToWechat(params: PublishParams, userId?: string): P
 
   try {
     console.log('📤 [微信发布API] 开始发布文章...', {
-      draftId: params.draftId,
+      title: params.title,
       wechatAppid: params.wechatAppid,
       articleType: params.articleType,
       userId: userId || 'default'

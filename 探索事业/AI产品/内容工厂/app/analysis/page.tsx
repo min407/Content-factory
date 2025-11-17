@@ -5,8 +5,6 @@ import { Search, Loader2, History, AlertCircle, Award, BarChart3, Eye, Heart, Tr
 import Link from 'next/link'
 import DashboardLayout from '@/components/DashboardLayout'
 import { withAuth } from '@/lib/auth-context'
-import { searchWeChatArticles } from '@/lib/wechat-api'
-import { WeChatArticle } from '@/types/wechat-api'
 import { ArticleSummary, TopicInsight } from '@/types/ai-analysis'
 import * as XLSX from 'xlsx'
 
@@ -180,7 +178,7 @@ function AnalysisPageContent() {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [showResult, setShowResult] = useState(false)
   const [progress, setProgress] = useState(0)
-  const [articles, setArticles] = useState<WeChatArticle[]>([])
+  const [articles, setArticles] = useState<any[]>([])
   const [error, setError] = useState<string>('')
   const [searchHistory, setSearchHistory] = useState<SearchHistory[]>([])
   const [showHistoryModal, setShowHistoryModal] = useState(false)
@@ -189,6 +187,7 @@ function AnalysisPageContent() {
   const [showCustomInput, setShowCustomInput] = useState(false)
   const [aiInsights, setAiInsights] = useState<TopicInsight[]>([])
   const [aiSummaries, setAiSummaries] = useState<ArticleSummary[]>([])
+  const [aiStats, setAiStats] = useState<any>(null)
   const [selectedInsights, setSelectedInsights] = useState<Set<number>>(new Set())
 
   // 保存选中的洞察到localStorage
@@ -311,78 +310,65 @@ function AnalysisPageContent() {
       setProgress(10)
 
       // 调用API获取公众号文章
-      const response = await searchWeChatArticles({
-        kw: keyword,
-        sort_type: 1,
-        mode: 1,
-        period: 7,
-        page: 1,
-        type: 1,
+      const response = await fetch('/api/ai-analysis', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          keyword,
+          count: articleCount
+        })
       })
 
       setProgress(30)
 
-      if (response.data && response.data.length > 0) {
-        const articlesData = response.data.slice(0, articleCount)
-        setArticles(articlesData)
-        setProgress(50)
-
-        // AI分析文章 - 通过API调用
-        const aiAnalysisResponse = await fetch('/api/ai-analysis', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            keyword: keyword,
-            count: articleCount,
-          }),
-        })
-
-        if (!aiAnalysisResponse.ok) {
-          const errorData = await aiAnalysisResponse.json()
-          throw new Error(errorData.message || 'AI分析失败')
-        }
-
-        const aiResult = await aiAnalysisResponse.json()
-
-        if (aiResult.success) {
-          setAiSummaries(aiResult.data.summaries)
-          setAiInsights(aiResult.data.insights)
-
-          // 保存AI分析结果到localStorage，供创作页面使用
-          const analysisData = {
-            keyword,
-            articles: articlesData,
-            summaries: aiResult.data.summaries,
-            insights: aiResult.data.insights,
-            stats: aiResult.data.stats,
-            analysisTime: aiResult.data.analysisTime || Date.now()
-          }
-          localStorage.setItem('ai-analysis-results', JSON.stringify(analysisData))
-          console.log('AI分析结果已保存到localStorage')
-        } else {
-          throw new Error('AI分析返回失败结果')
-        }
-
-        setProgress(70)
-        setProgress(90)
-
-        // 完成
-        setProgress(100)
-        setIsAnalyzing(false)
-        setShowResult(true)
-
-        // 保存搜索历史
-        await saveSearchHistory({
-          keyword,
-          resultCount: articlesData.length,
-          articlesData: articlesData,
-          apiResponse: response,
-        })
-      } else {
-        throw new Error('未找到相关文章')
+      if (!response.ok) {
+        throw new Error('搜索失败')
       }
+
+      const result = await response.json()
+
+      if (!result.success) {
+        throw new Error(result.message || '搜索失败')
+      }
+
+      const articlesData = result.data.articles || []
+      setArticles(articlesData)
+      setProgress(70) // AI分析已经包含在API调用中了
+
+      if (result.success) {
+        setAiSummaries(result.data.summaries || [])
+        setAiInsights(result.data.insights || [])
+        setAiStats(result.data.stats || {})
+
+        // 保存AI分析结果到localStorage，供创作页面使用
+        const analysisData = {
+          keyword,
+          articles: articlesData,
+          summaries: result.data.summaries || [],
+          insights: result.data.insights || [],
+          stats: result.data.stats || {},
+          analysisTime: result.data.analysisTime || Date.now()
+        }
+        localStorage.setItem('ai-analysis-results', JSON.stringify(analysisData))
+        console.log('AI分析结果已保存到localStorage')
+      }
+
+      setProgress(90)
+
+      // 完成
+      setProgress(100)
+      setIsAnalyzing(false)
+      setShowResult(true)
+
+      // 保存搜索历史
+      await saveSearchHistory({
+        keyword,
+        resultCount: articlesData.length,
+        articlesData: articlesData,
+        apiResponse: result,
+      })
     } catch (err) {
       console.error('分析失败:', err)
       setError(err instanceof Error ? err.message : '分析失败，请重试')

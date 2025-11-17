@@ -4,7 +4,7 @@
  */
 
 import { User, UserSession } from '@/types/user'
-import { ApiConfig } from '@/types/api-config'
+import { ApiConfig, ApiProvider } from '@/types/api-config'
 
 // 内存存储（仅在单个函数调用期间有效）
 let memoryUsers: User[] = []
@@ -21,11 +21,20 @@ const DEFAULT_USERS: User[] = [
     isActive: true,
     createdAt: new Date(),
     updatedAt: new Date()
+  },
+  {
+    id: 'user_1763350896899_2805jg92q',
+    email: 'liuzmid@gmail.com',
+    username: '卷儿哥',
+    isActive: true,
+    createdAt: new Date(),
+    updatedAt: new Date()
   }
 ]
 
 const DEFAULT_PASSWORDS: Record<string, string> = {
-  'user_1': 'admin123'
+  'user_1': 'admin123',
+  'user_1763350896899_2805jg92q': 'test123' // 生产环境请使用更安全的密码
 }
 
 /**
@@ -284,70 +293,80 @@ export async function initializeStorage(): Promise<void> {
  * 确保默认API配置存在
  */
 function ensureDefaultApiConfigs(): void {
-  const defaultUserId = 'user_1'
+  const users = ['user_1', 'user_1763350896899_2805jg92q']
 
-  if (!memoryUserConfigs[defaultUserId]) {
-    console.log('🔧 初始化默认用户API配置')
+  users.forEach(userId => {
+    if (!memoryUserConfigs[userId]) {
+      console.log(`🔧 初始化用户 ${userId} 的API配置`)
 
-    // 从本地配置文件读取的默认配置
-    const defaultConfigs = [
-      {
-        id: 'default-openrouter',
-        provider: 'openrouter',
-        name: 'OpenRouter',
-        apiKey: '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',
-        apiBase: 'https://openrouter.ai/api/v1',
-        model: 'anthropic/claude-3.5-sonnet',
-        lastTested: new Date().toISOString(),
-        testStatus: 'success',
-        testMessage: '连接成功',
-        updatedAt: new Date().toISOString(),
-        isConfigured: true,
-        isActive: true
-      },
-      {
-        id: 'default-siliconflow',
-        provider: 'siliconflow',
-        name: 'Silicon Flow',
-        apiKey: 'sk-vikxdjnhqciuhqevdvpvirsccidnkpckrehyuupklsxsihup',
-        apiBase: 'https://api.siliconflow.cn/v1/images/generations',
-        model: 'Kwai-Kolors/Kolors',
-        lastTested: new Date().toISOString(),
-        testStatus: 'success',
-        testMessage: '连接成功',
-        updatedAt: new Date().toISOString(),
-        isConfigured: true,
-        isActive: true
-      },
-      {
-        id: 'default-wechat-search',
-        provider: 'wechat_search',
-        name: '微信公众号搜索',
-        apiKey: 'JZL134dc4c7b7886079',
-        apiBase: 'https://www.dajiala.com/fbmain/monitor/v3/kw_search',
-        lastTested: new Date().toISOString(),
-        testStatus: 'success',
-        testMessage: '连接成功',
-        updatedAt: new Date().toISOString(),
-        isConfigured: true,
-        isActive: true
-      },
-      {
-        id: 'default-wechat-publish',
-        provider: 'wechat_publish',
-        name: '微信公众号发布',
-        apiKey: 'xhs_ece2ac77bf86495442d51095ac9ffcc1',
-        apiBase: 'https://wx.limyai.com/api/openapi',
-        lastTested: new Date().toISOString(),
-        testStatus: 'success',
-        testMessage: '连接成功',
-        updatedAt: new Date().toISOString(),
-        isConfigured: true,
-        isActive: true
-      }
-    ]
+      // 从本地配置文件读取的默认配置
+      const defaultConfigs = [
+        {
+          id: `${userId}-openrouter`,
+          provider: ApiProvider.OPENROUTER,
+          name: 'OpenRouter',
+          description: 'OpenRouter AI 模型服务',
+          apiKey: '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',
+          apiBase: 'https://openrouter.ai/api/v1',
+          model: 'anthropic/claude-3.5-sonnet',
+          lastTested: new Date(),
+          testStatus: 'success' as const,
+          testMessage: '连接成功',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          isConfigured: true,
+          isActive: true
+        },
+        {
+          id: `${userId}-siliconflow`,
+          provider: ApiProvider.SILICONFLOW,
+          name: 'Silicon Flow',
+          description: '硅基流动 AI 图片生成服务',
+          apiKey: 'sk-vikxdjnhqciuhqevdvpvirsccidnkpckrehyuupklsxsihup',
+          apiBase: 'https://api.siliconflow.cn/v1/images/generations',
+          model: 'Kwai-Kolors/Kolors',
+          lastTested: new Date(),
+          testStatus: 'success' as const,
+          testMessage: '连接成功',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          isConfigured: true,
+          isActive: true
+        },
+        {
+          id: `${userId}-wechat-search`,
+          provider: ApiProvider.WECHAT_SEARCH,
+          name: '微信公众号搜索',
+          description: '微信公众号文章搜索服务',
+          apiKey: 'JZL134dc4c7b7886079',
+          apiBase: 'https://www.dajiala.com/fbmain/monitor/v3/kw_search',
+          lastTested: new Date(),
+          testStatus: 'success' as const,
+          testMessage: '连接成功',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          isConfigured: true,
+          isActive: true
+        },
+        {
+          id: `${userId}-wechat-publish`,
+          provider: ApiProvider.WECHAT_PUBLISH,
+          name: '微信公众号发布',
+          description: '微信公众号文章发布服务',
+          apiKey: 'xhs_ece2ac77bf86495442d51095ac9ffcc1',
+          apiBase: 'https://wx.limyai.com/api/openapi',
+          lastTested: new Date(),
+          testStatus: 'success' as const,
+          testMessage: '连接成功',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          isConfigured: true,
+          isActive: true
+        }
+      ]
 
-    memoryUserConfigs[defaultUserId] = defaultConfigs
-    console.log(`✅ 已初始化 ${defaultConfigs.length} 个默认API配置`)
-  }
+      memoryUserConfigs[userId] = defaultConfigs
+      console.log(`✅ 已为用户 ${userId} 初始化 ${defaultConfigs.length} 个默认API配置`)
+    }
+  })
 }

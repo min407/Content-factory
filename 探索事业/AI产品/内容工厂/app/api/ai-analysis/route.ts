@@ -43,12 +43,12 @@ export async function POST(request: NextRequest) {
       )
 
       console.log('📊 [AI分析API] 搜索结果:', {
-        total: searchResult.data?.total || 0,
-        count: searchResult.data?.list?.length || 0
+        total: searchResult.total || 0,
+        count: searchResult.data?.length || 0
       })
 
       // 转换微信API返回的数据格式为我们需要的格式
-      const articles = searchResult.data?.list?.slice(0, count).map(article => ({
+      const articles = searchResult.data?.slice(0, count).map(article => ({
         title: article.title || '无标题',
         content: article.content || article.digest || '无内容',
         likes: parseInt(article.like_num || '0'),
@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
         stats,
         analysisTime: Date.now(),
         searchKeyword: keyword,
-        searchTotal: searchResult.data?.total || 0
+        searchTotal: searchResult.total || 0
       }
 
       console.log('✅ [AI分析API] 分析完成')
