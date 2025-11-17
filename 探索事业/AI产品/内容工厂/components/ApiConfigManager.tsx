@@ -106,12 +106,12 @@ export default function ApiConfigManagerComponent() {
       try {
         const userConfigs = await UserApiConfigManager.getConfigs()
         if (userConfigs.length > 0) {
-          setConfigs(userConfigs)
+          setConfigs(userConfigs as ApiConfig[])
           console.log('✅ 用户配置加载成功:', userConfigs.length)
 
           // 自动检测已配置API的连接状态
           setTimeout(() => {
-            autoCheckConnectionStatus(userConfigs)
+            autoCheckConnectionStatus(userConfigs as ApiConfig[])
           }, 500) // 延迟500ms确保UI已渲染
 
           return

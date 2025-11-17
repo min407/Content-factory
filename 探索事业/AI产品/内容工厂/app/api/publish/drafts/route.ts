@@ -84,6 +84,46 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// 更新草稿状态
+export async function PUT(request: NextRequest) {
+  try {
+    const updateData = await request.json()
+    const { id, status, publishedAt, publishedTo } = updateData
+
+    if (!id) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: '缺少草稿ID'
+        },
+        { status: 400 }
+      )
+    }
+
+    console.log(`收到草稿更新请求:`, { id, status, publishedAt, publishedTo })
+
+    // 服务器端无法直接访问localStorage，这里我们只是记录日志
+    // 实际的状态更新需要在客户端进行
+    console.log(`✅ 草稿 ${id} 状态更新请求已接收:`, { status, publishedAt, publishedTo })
+
+    return NextResponse.json({
+      success: true,
+      data: { id, status, publishedAt, publishedTo, updatedAt: new Date() },
+      message: '草稿状态更新请求已记录（状态需要在客户端更新）'
+    })
+  } catch (error) {
+    console.error('更新草稿状态失败:', error)
+    return NextResponse.json(
+      {
+        success: false,
+        error: '更新草稿状态失败',
+        message: error instanceof Error ? error.message : '未知错误'
+      },
+      { status: 500 }
+    )
+  }
+}
+
 // 删除草稿
 export async function DELETE(request: NextRequest) {
   try {

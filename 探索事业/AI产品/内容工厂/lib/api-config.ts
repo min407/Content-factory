@@ -495,7 +495,7 @@ export class ApiConfigManager {
 
     try {
       // 检查apiBase是否已经包含完整路径，避免重复拼接
-      let apiUrl = config.apiBase
+      let apiUrl = config.apiBase || ''
       if (!apiUrl.includes('/images/generations')) {
         apiUrl = `${config.apiBase}/images/generations`
       }

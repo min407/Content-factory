@@ -62,16 +62,33 @@ function PublishPageContent() {
   const [showWechatPublishModal, setShowWechatPublishModal] = useState(false)
   const [selectedDraft, setSelectedDraft] = useState<any>(null)
 
+  // 批量发布状态
+  const [isBatchPublishing, setIsBatchPublishing] = useState(false)
+  const [batchPublishQueue, setBatchPublishQueue] = useState<string[]>([])
+  const [currentBatchIndex, setCurrentBatchIndex] = useState(0)
+  const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 })
+
+  // 通知状态
+  const [notification, setNotification] = useState<{
+    show: boolean
+    type: 'success' | 'error'
+    message: string
+  }>({ show: false, type: 'success', message: '' })
+
   // 加载草稿数据（直接从客户端localStorage读取）
   const loadDrafts = async () => {
     try {
+      console.log('🔄 开始加载草稿数据...')
       // 确保在客户端环境
       if (typeof window !== 'undefined') {
         const drafts = DraftManager.getDrafts()
+        console.log(`📋 加载到 ${drafts.length} 个草稿:`, drafts.map(d => ({ id: d.id, title: d.title, status: d.status })))
         setDrafts(drafts)
+      } else {
+        console.log('⚠️ 不在客户端环境，跳过草稿加载')
       }
     } catch (error) {
-      console.error('加载草稿出错:', error)
+      console.error('❌ 加载草稿出错:', error)
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -85,8 +102,49 @@ function PublishPageContent() {
 
   // 刷新草稿
   const handleRefresh = async () => {
+    console.log('🔄 用户点击了刷新按钮')
     setRefreshing(true)
+
+    // 显示刷新开始的临时通知
+    showNotification('success', '正在刷新草稿列表...')
+
     await loadDrafts()
+
+    // 显示刷新完成的通知
+    const currentDrafts = drafts.length
+    showNotification('success', `✅ 刷新完成！当前有 ${currentDrafts} 个草稿`)
+
+    console.log('✅ 刷新完成')
+  }
+
+  // 显示通知
+  const showNotification = (type: 'success' | 'error', message: string) => {
+    setNotification({ show: true, type, message })
+    setTimeout(() => {
+      setNotification(prev => ({ ...prev, show: false }))
+    }, 5000)
+  }
+
+  // 批量发布处理函数
+  const handleBatchPublish = async () => {
+    if (selectedArticles.length === 0) {
+      alert('请先选择要发布的文章')
+      return
+    }
+
+    // 设置批量发布模式并显示公众号选择对话框
+    setIsBatchPublishing(true)
+    setBatchProgress({ current: 0, total: selectedArticles.length })
+
+    // 设置一个虚拟的草稿对象来触发微信发布模态框
+    setSelectedDraft({
+      id: 'batch-draft',
+      title: `批量发布 ${selectedArticles.length} 个草稿`,
+      content: '批量发布模式',
+      isBatch: true,
+      batchDrafts: drafts.filter(draft => selectedArticles.includes(draft.id))
+    })
+    setShowWechatPublishModal(true)
   }
 
   const handlePublish = (draftId: string, platform: 'xiaohongshu' | 'wechat') => {
@@ -110,16 +168,33 @@ function PublishPageContent() {
 
   // 处理公众号发布成功
   const handleWechatPublishSuccess = (result: any) => {
-    // 重新加载草稿列表
+    // 检查是否是批量发布结果
+    if (result.successCount !== undefined && result.failedCount !== undefined) {
+      // 批量发布结果
+      const { successCount, failedCount, total } = result
+      if (failedCount === 0) {
+        showNotification('success', `✅ 批量发布完成！成功发布 ${successCount} 个草稿`)
+      } else {
+        showNotification('error', `⚠️ 批量发布完成：成功 ${successCount} 个，失败 ${failedCount} 个`)
+      }
+
+      // 清空选择并重置批量发布状态
+      setSelectedArticles([])
+      setIsBatchPublishing(false)
+      setBatchProgress({ current: 0, total: 0 })
+    } else {
+      // 单篇发布结果
+      showNotification('success', '✅ 文章发布成功！')
+    }
+
+    // 立即重新加载草稿列表，状态已在客户端更新
     loadDrafts()
-    // 可以添加成功提示
-    console.log('公众号发布成功:', result)
   }
 
   // 处理公众号发布错误
   const handleWechatPublishError = (error: string) => {
-    // 可以添加错误提示
     console.error('公众号发布失败:', error)
+    showNotification('error', `❌ 发布失败：${error}`)
   }
 
   const handleSelectAll = () => {
@@ -228,6 +303,38 @@ function PublishPageContent() {
 
   return (
     <div className="p-6">
+      {/* 右上角通知 */}
+      {notification.show && (
+        <div
+          className={`fixed top-4 right-4 z-50 max-w-sm p-4 rounded-lg shadow-lg border transform transition-all duration-300 ${
+            notification.type === 'success'
+              ? 'bg-green-50 border-green-200 text-green-800'
+              : 'bg-red-50 border-red-200 text-red-800'
+          }`}
+        >
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              {notification.type === 'success' ? (
+                <CheckCircle className="w-5 h-5 text-green-400" />
+              ) : (
+                <AlertCircle className="w-5 h-5 text-red-400" />
+              )}
+            </div>
+            <div className="ml-3 flex-1">
+              <p className="text-sm font-medium">{notification.message}</p>
+            </div>
+            <div className="ml-4 flex-shrink-0">
+              <button
+                onClick={() => setNotification(prev => ({ ...prev, show: false }))}
+                className="inline-flex text-gray-400 hover:text-gray-600 focus:outline-none"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 页面标题 */}
       <div className="mb-6 flex items-center justify-between">
         <div>
@@ -295,12 +402,46 @@ function PublishPageContent() {
 
           {/* 批量操作 */}
           {selectedArticles.length > 0 && (
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-3">
               <span className="text-sm text-gray-500">
                 已选择 {selectedArticles.length} 项
               </span>
-              <button className="px-3 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600">
-                批量发布
+
+              {/* 批量发布进度条 */}
+              {isBatchPublishing && (
+                <div className="flex items-center space-x-3 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+                  <div className="flex items-center space-x-2">
+                    <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                    <div>
+                      <div className="text-sm font-medium text-blue-900">
+                        正在批量发布... ({batchProgress.total} 个草稿)
+                      </div>
+                      <div className="text-xs text-blue-700">
+                        后台自动处理，请稍候
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex-1 max-w-xs">
+                    <div className="w-full bg-blue-100 rounded-full h-2">
+                      <div className="bg-blue-600 h-2 rounded-full animate-pulse" />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <button
+                onClick={handleBatchPublish}
+                className="px-3 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+                disabled={isBatchPublishing}
+              >
+                {isBatchPublishing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    批量发布中
+                  </>
+                ) : (
+                  '批量发布'
+                )}
               </button>
               <button
                 onClick={() => {
@@ -362,7 +503,7 @@ function PublishPageContent() {
                     type="checkbox"
                     checked={selectedArticles.length === filteredDrafts.length}
                     onChange={handleSelectAll}
-                    className="rounded border-gray-300"
+                    className="w-5 h-5 rounded border-gray-300 cursor-pointer"
                   />
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -401,7 +542,7 @@ function PublishPageContent() {
                             setSelectedArticles(selectedArticles.filter(id => id !== draft.id))
                           }
                         }}
-                        className="rounded border-gray-300"
+                        className="w-5 h-5 rounded border-gray-300 cursor-pointer"
                       />
                     </td>
                     <td className="px-6 py-4">
@@ -541,8 +682,21 @@ function PublishPageContent() {
         <WechatPublishModal
           isOpen={showWechatPublishModal}
           onClose={() => {
-            setShowWechatPublishModal(false)
-            setSelectedDraft(null)
+            if (isBatchPublishing) {
+              // 如果是批量发布，询问是否要停止
+              if (confirm('您正在批量发布中，关闭弹窗将停止批量发布。确定要关闭吗？')) {
+                setIsBatchPublishing(false)
+                setBatchPublishQueue([])
+                setCurrentBatchIndex(0)
+                setSelectedArticles([])
+                setBatchProgress({ current: 0, total: 0 })
+                setShowWechatPublishModal(false)
+                setSelectedDraft(null)
+              }
+            } else {
+              setShowWechatPublishModal(false)
+              setSelectedDraft(null)
+            }
           }}
           draft={selectedDraft}
           onSuccess={handleWechatPublishSuccess}

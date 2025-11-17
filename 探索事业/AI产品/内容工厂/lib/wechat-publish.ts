@@ -11,7 +11,7 @@ import { ApiProvider } from '@/types/api-config'
 /**
  * 获取微信发布API配置
  */
-function getWechatPublishConfig() {
+export function getWechatPublishConfig() {
   const apiKey = ApiConfigManager.getApiKey(ApiProvider.WECHAT_PUBLISH)
   const apiBase = ApiConfigManager.getApiBase(ApiProvider.WECHAT_PUBLISH) || 'https://wx.limyai.com/api/openapi'
 
@@ -45,7 +45,7 @@ export async function getWechatAccounts(): Promise<WechatAccount[]> {
     const data: WechatAccountsResponse = await response.json()
 
     if (!data.success) {
-      throw new Error(data.error || '获取公众号列表失败')
+      throw new Error('获取公众号列表失败')
     }
 
     return data.data.accounts
@@ -100,11 +100,13 @@ export async function publishToWechat(params: PublishParams): Promise<PublishRes
  * @returns Promise<PublishResult>
  */
 export async function getPublishStatus(publicationId: string): Promise<PublishResult> {
+  const config = getWechatPublishConfig()
+
   try {
-    const response = await fetch(`${API_BASE}/wechat-publish/status`, {
+    const response = await fetch(`${config.apiBase}/wechat-publish/status`, {
       method: 'POST',
       headers: {
-        'X-API-Key': API_KEY,
+        'X-API-Key': config.apiKey,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({ publicationId })

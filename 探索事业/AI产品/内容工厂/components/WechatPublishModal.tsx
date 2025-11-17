@@ -79,50 +79,115 @@ export default function WechatPublishModal({
       setPublishStatus(PublishStatus.LOADING)
       setError('')
 
-      const response = await fetch('/api/wechat-publish/publish', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          draftId: draft.id,
-          wechatAppid: selectedAccount,
-          articleType: articleType,
-          draftData: draft // 传递完整的草稿数据
-        })
-      })
-
-      const data = await response.json()
-
-      if (data.success) {
-        setPublishStatus(PublishStatus.SUCCESS)
-        setPublishResult(data.data)
-        setStep('result')
-
-        // 在客户端更新草稿状态
-        try {
-          const { DraftManager } = await import('@/lib/content-management')
-          DraftManager.updateDraft(draft.id, {
-            status: 'published',
-            publishedAt: new Date(),
-            publishedTo: {
-              platform: 'wechat',
-              accountId: selectedAccount,
-              articleType: articleType,
-              publicationId: data.data.publicationId,
-              mediaId: data.data.mediaId
-            }
+      // 检查是否是批量发布模式
+      if (draft.isBatch && draft.batchDrafts) {
+        // 批量发布模式
+        const batchResponse = await fetch('/api/wechat-publish/batch-publish', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            draftIds: draft.batchDrafts.map((d: any) => d.id),
+            wechatAppid: selectedAccount,
+            articleType: articleType,
+            drafts: draft.batchDrafts
           })
-          console.log('客户端草稿状态更新成功')
-        } catch (updateError) {
-          console.error('客户端更新草稿状态失败:', updateError)
-        }
+        })
 
-        onSuccess?.(data.data)
+        const batchData = await batchResponse.json()
+
+        if (batchResponse.ok && batchData.success) {
+          setPublishStatus(PublishStatus.SUCCESS)
+          setPublishResult({
+            total: batchData.data.total,
+            successCount: batchData.data.successCount,
+            failedCount: batchData.data.failedCount,
+            results: batchData.data.results
+          })
+          setStep('result')
+
+          // 在客户端更新批量发布的草稿状态
+          try {
+            const { DraftManager } = await import('@/lib/content-management')
+
+            // 更新每个成功发布的草稿状态
+            const successResults = batchData.data.results.filter((result: any) => result.status === 'success')
+
+            for (const result of successResults) {
+              const draftItem = draft.batchDrafts.find((d: any) => d.id === result.draftId)
+              if (draftItem) {
+                DraftManager.updateDraft(result.draftId, {
+                  status: 'published',
+                  publishedAt: new Date(),
+                  publishedTo: {
+                    platform: 'wechat',
+                    accountId: selectedAccount,
+                    articleType: articleType,
+                    publicationId: result.publicationId,
+                    mediaId: result.mediaId
+                  }
+                })
+                console.log(`✅ 客户端更新草稿 ${result.draftId} 状态成功`)
+              }
+            }
+          } catch (updateError) {
+            console.error('客户端批量更新草稿状态失败:', updateError)
+          }
+
+          onSuccess?.(batchData.data)
+        } else {
+          setPublishStatus(PublishStatus.ERROR)
+          setError(batchData.error || '批量发布失败')
+          onError?.(batchData.error || '批量发布失败')
+        }
       } else {
-        setPublishStatus(PublishStatus.ERROR)
-        setError(data.error || '发布失败')
-        onError?.(data.error || '发布失败')
+        // 单篇发布模式
+        const response = await fetch('/api/wechat-publish/publish', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            draftId: draft.id,
+            wechatAppid: selectedAccount,
+            articleType: articleType,
+            draftData: draft // 传递完整的草稿数据
+          })
+        })
+
+        const data = await response.json()
+
+        if (data.success) {
+          setPublishStatus(PublishStatus.SUCCESS)
+          setPublishResult(data.data)
+          setStep('result')
+
+          // 在客户端更新草稿状态
+          try {
+            const { DraftManager } = await import('@/lib/content-management')
+            DraftManager.updateDraft(draft.id, {
+              status: 'published',
+              publishedAt: new Date(),
+              publishedTo: {
+                platform: 'wechat',
+                accountId: selectedAccount,
+                articleType: articleType,
+                publicationId: data.data.publicationId,
+                mediaId: data.data.mediaId
+              }
+            })
+            console.log('客户端草稿状态更新成功')
+          } catch (updateError) {
+            console.error('客户端更新草稿状态失败:', updateError)
+          }
+
+          onSuccess?.(data.data)
+        } else {
+          setPublishStatus(PublishStatus.ERROR)
+          setError(data.error || '发布失败')
+          onError?.(data.error || '发布失败')
+        }
       }
     } catch (err) {
       console.error('发布失败:', err)

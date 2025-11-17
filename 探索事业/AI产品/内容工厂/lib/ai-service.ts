@@ -350,18 +350,18 @@ export function generateWritingStylePrompt(topic: TopicWithHistory): string {
   return `
 基于以下选题分析，自动调整写作风格：
 
-**决策阶段**: ${decisionStage.stage} - ${decisionStage.reason}
-**目标人群**: ${audienceScene.audience}
-**使用场景**: ${audienceScene.scene}
-**情绪痛点**: ${demandPainPoint.emotionalPain}
-**现实需求**: ${demandPainPoint.realisticPain}
-**期望获得**: ${demandPainPoint.expectation}
+**决策阶段**: ${decisionStage?.stage || '未知'} - ${decisionStage?.reason || '暂无分析'}
+**目标人群**: ${audienceScene?.audience || '大众用户'}
+**使用场景**: ${audienceScene?.scene || '日常使用'}
+**情绪痛点**: ${demandPainPoint?.emotionalPain || '无明显痛点'}
+**现实需求**: ${demandPainPoint?.realisticPain || '基本需求'}
+**期望获得**: ${demandPainPoint?.expectation || '解决问题'}
 
 请根据以上分析，采用最适合的：
-- 语气风格：${getRecommendedTone(decisionStage.stage, demandPainPoint.emotionalPain)}
-- 内容结构：${getRecommendedStructure(decisionStage.stage)}
-- 案例类型：${getRecommendedCaseType(audienceScene.audience)}
-- 互动方式：${getRecommendedInteraction(demandPainPoint.expectation)}
+- 语气风格：${getRecommendedTone(decisionStage?.stage || '考虑', demandPainPoint?.emotionalPain || '无明显痛点')}
+- 内容结构：${getRecommendedStructure(decisionStage?.stage || '考虑')}
+- 案例类型：${getRecommendedCaseType(audienceScene?.audience || '大众用户')}
+- 互动方式：${getRecommendedInteraction(demandPainPoint?.expectation || '解决问题')}
 `
 }
 
@@ -957,9 +957,9 @@ function generateFallbackPrompt(topic?: TopicWithHistory, index = 0): string {
   // 如果有主题信息，生成相关提示词
   if (topic) {
     return [
-      topic.audienceScene.audience + '在' + topic.audienceScene.scene + '的场景插画，简洁现代风格',
+      (topic.audienceScene?.audience || '用户') + '在' + (topic.audienceScene?.scene || '场景') + '的场景插画，简洁现代风格',
       topic.title + '相关的概念图，信息图表风格',
-      topic.demandPainPoint.expectation + '的视觉化表达，积极风格',
+      (topic.demandPainPoint?.expectation || '需求') + '的视觉化表达，积极风格',
       ...fallbackPrompts
     ][index % 5];
   }

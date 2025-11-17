@@ -193,9 +193,13 @@ function AnalysisPageContent() {
 
   // 保存选中的洞察到localStorage
   const saveSelectedInsights = useCallback(() => {
-    const insights = aiInsights.length > 0 ? aiInsights : mockAnalysisResult.insights
+    if (aiInsights.length === 0) {
+      alert('暂无洞察数据可保存')
+      return
+    }
+
     const selectedData = Array.from(selectedInsights).map(index => ({
-      insight: insights[index],
+      insight: aiInsights[index],
       index
     }))
 
@@ -416,7 +420,7 @@ function AnalysisPageContent() {
   // 获取点赞TOP5文章
   const getTopLikesArticles = () => {
     if (!articles || articles.length === 0) {
-      return mockAnalysisResult.topLikesArticles
+      return []
     }
 
     return [...articles]
@@ -434,7 +438,7 @@ function AnalysisPageContent() {
   // 获取互动率TOP5文章
   const getTopEngagementArticles = () => {
     if (!articles || articles.length === 0) {
-      return mockAnalysisResult.topEngagementArticles
+      return []
     }
 
     return [...articles]
@@ -456,7 +460,11 @@ function AnalysisPageContent() {
 
   // 下载洞察报告
   const downloadInsightReport = () => {
-    const insights = aiInsights.length > 0 ? aiInsights : mockAnalysisResult.insights
+    if (aiInsights.length === 0) {
+      alert('暂无洞察数据可下载')
+      return
+    }
+
     const reportData = {
       keyword: keyword,
       generatedAt: new Date().toLocaleString('zh-CN'),
@@ -465,7 +473,7 @@ function AnalysisPageContent() {
         avgReads: stats.avgReads,
         avgLikes: stats.avgLikes
       },
-      insights: insights.map((insight, index) => ({
+      insights: aiInsights.map((insight, index) => ({
         rank: index + 1,
         title: insight.title,
         description: insight.description,
@@ -814,7 +822,7 @@ function AnalysisPageContent() {
                 </h2>
               </div>
               <div className="space-y-3">
-                {topLikesArticles.map((article, index) => (
+                {topLikesArticles.length > 0 ? topLikesArticles.map((article, index) => (
                   <div
                     key={index}
                     className={`p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors group ${article.url ? 'cursor-pointer' : ''}`}
@@ -844,7 +852,12 @@ function AnalysisPageContent() {
                       </div>
                     </div>
                   </div>
-                ))}
+                )) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <Award className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                    <p>暂无数据</p>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -857,7 +870,7 @@ function AnalysisPageContent() {
                 </h2>
               </div>
               <div className="space-y-3">
-                {topEngagementArticles.map((article, index) => (
+                {topEngagementArticles.length > 0 ? topEngagementArticles.map((article, index) => (
                   <div
                     key={index}
                     className={`p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors group ${article.url ? 'cursor-pointer' : ''}`}
@@ -887,7 +900,12 @@ function AnalysisPageContent() {
                       </div>
                     </div>
                   </div>
-                ))}
+                )) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <Zap className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                    <p>暂无数据</p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -914,7 +932,7 @@ function AnalysisPageContent() {
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {(aiInsights.length > 0 ? aiInsights : mockAnalysisResult.insights).map((insight, index) => (
+              {aiInsights.length > 0 ? aiInsights.map((insight, index) => (
                 <div key={index} className={`p-4 rounded-lg border transition-all ${
                   selectedInsights.has(index)
                     ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 shadow-sm'
@@ -1041,7 +1059,19 @@ function AnalysisPageContent() {
                   </div>
                 </div>
               </div>
-              ))}
+              )) : (
+              <div className="col-span-2 text-center py-12">
+                <div className="max-w-md mx-auto">
+                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <BarChart3 className="w-8 h-8 text-gray-400" />
+                  </div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">暂无选题洞察数据</h3>
+                  <p className="text-gray-500 text-sm">
+                    搜索关键词并分析文章后，这里将显示AI生成的选题洞察和内容创作建议
+                  </p>
+                </div>
+              </div>
+            )}
             </div>
 
             {/* 操作按钮 */}
