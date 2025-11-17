@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { AuthResponse, AuthErrorCode } from '@/types/user'
-import { SessionStorage } from '@/lib/vercel-data-storage'
+import { SessionStorage } from '@/lib/data-storage-hybrid'
 
 /**
  * POST /api/auth/logout - 用户登出

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { UserApiConfig, AuthResponse, AuthErrorCode } from '@/types/user'
-import { SessionStorage, UserConfigStorage } from '@/lib/vercel-data-storage'
+import { SessionStorage, UserConfigStorage } from '@/lib/data-storage-hybrid'
 
 /**
  * 从请求中获取用户信息
