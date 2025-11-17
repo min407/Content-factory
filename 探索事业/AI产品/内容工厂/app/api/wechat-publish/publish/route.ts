@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { publishToWechat, formatPublishParams, validatePublishParams } from '@/lib/wechat-publish'
 import { DraftManager } from '@/lib/content-management'
+import { getUserFromRequest } from '@/lib/user-auth'
 
 /**
  * 发布文章到公众号API
@@ -12,6 +13,20 @@ export async function POST(request: NextRequest) {
     const { draftId, wechatAppid, articleType, draftData } = body
 
     console.log('开始发布文章到公众号:', { draftId, wechatAppid, articleType })
+
+    // 获取用户信息
+    const user = await getUserFromRequest(request)
+    if (!user) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: '用户未登录，请先登录'
+        },
+        { status: 401 }
+      )
+    }
+
+    console.log('👤 [发布API] 用户信息:', { userId: user.userId, email: user.email })
 
     // 参数验证
     if (!draftId && !draftData) {
@@ -87,7 +102,7 @@ export async function POST(request: NextRequest) {
     console.log('发布参数验证通过，开始调用发布API...')
 
     // 调用发布API
-    const publishResult = await publishToWechat(publishParams)
+    const publishResult = await publishToWechat(publishParams, user.userId)
 
     console.log('文章发布成功:', publishResult)
 

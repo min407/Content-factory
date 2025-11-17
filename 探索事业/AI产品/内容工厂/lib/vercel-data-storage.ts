@@ -276,5 +276,78 @@ export class UserConfigStorage {
  */
 export async function initializeStorage(): Promise<void> {
   ensureDefaultUsers()
+  await ensureDefaultApiConfigs()
   console.log('🗄️ Vercel环境数据存储系统初始化完成')
+}
+
+/**
+ * 确保默认API配置存在
+ */
+function ensureDefaultApiConfigs(): void {
+  const defaultUserId = 'user_1'
+
+  if (!memoryUserConfigs[defaultUserId]) {
+    console.log('🔧 初始化默认用户API配置')
+
+    // 从本地配置文件读取的默认配置
+    const defaultConfigs = [
+      {
+        id: 'default-openrouter',
+        provider: 'openrouter',
+        name: 'OpenRouter',
+        apiKey: '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',
+        apiBase: 'https://openrouter.ai/api/v1',
+        model: 'anthropic/claude-3.5-sonnet',
+        lastTested: new Date().toISOString(),
+        testStatus: 'success',
+        testMessage: '连接成功',
+        updatedAt: new Date().toISOString(),
+        isConfigured: true,
+        isActive: true
+      },
+      {
+        id: 'default-siliconflow',
+        provider: 'siliconflow',
+        name: 'Silicon Flow',
+        apiKey: 'sk-vikxdjnhqciuhqevdvpvirsccidnkpckrehyuupklsxsihup',
+        apiBase: 'https://api.siliconflow.cn/v1/images/generations',
+        model: 'Kwai-Kolors/Kolors',
+        lastTested: new Date().toISOString(),
+        testStatus: 'success',
+        testMessage: '连接成功',
+        updatedAt: new Date().toISOString(),
+        isConfigured: true,
+        isActive: true
+      },
+      {
+        id: 'default-wechat-search',
+        provider: 'wechat_search',
+        name: '微信公众号搜索',
+        apiKey: 'JZL134dc4c7b7886079',
+        apiBase: 'https://www.dajiala.com/fbmain/monitor/v3/kw_search',
+        lastTested: new Date().toISOString(),
+        testStatus: 'success',
+        testMessage: '连接成功',
+        updatedAt: new Date().toISOString(),
+        isConfigured: true,
+        isActive: true
+      },
+      {
+        id: 'default-wechat-publish',
+        provider: 'wechat_publish',
+        name: '微信公众号发布',
+        apiKey: 'xhs_ece2ac77bf86495442d51095ac9ffcc1',
+        apiBase: 'https://wx.limyai.com/api/openapi',
+        lastTested: new Date().toISOString(),
+        testStatus: 'success',
+        testMessage: '连接成功',
+        updatedAt: new Date().toISOString(),
+        isConfigured: true,
+        isActive: true
+      }
+    ]
+
+    memoryUserConfigs[defaultUserId] = defaultConfigs
+    console.log(`✅ 已初始化 ${defaultConfigs.length} 个默认API配置`)
+  }
 }

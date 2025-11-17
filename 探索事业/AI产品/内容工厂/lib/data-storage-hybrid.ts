@@ -8,7 +8,7 @@ import { ApiConfig } from '@/types/api-config'
 
 // 检查是否在Vercel环境
 function isVercelEnvironment(): boolean {
-  return process.env.VERCEL === '1' || process.env.NODE_ENV === 'production'
+  return process.env.VERCEL === '1'
 }
 
 // 动态导入存储模块

@@ -5,31 +5,79 @@ import {
   PublishParams,
   PublishResult
 } from '@/types/wechat-publish'
-import { ApiConfigManager } from './api-config'
 import { ApiProvider } from '@/types/api-config'
 
 /**
  * 获取微信发布API配置
+ * @param userId 用户ID，如果未提供则使用默认用户
  */
-export function getWechatPublishConfig() {
-  const apiKey = ApiConfigManager.getApiKey(ApiProvider.WECHAT_PUBLISH)
-  const apiBase = ApiConfigManager.getApiBase(ApiProvider.WECHAT_PUBLISH) || 'https://wx.limyai.com/api/openapi'
+export async function getWechatPublishConfig(userId?: string): Promise<{ apiKey: string; apiBase: string }> {
+  try {
+    // 动态导入混合存储系统
+    const { HybridUserConfigStorage } = await import('@/lib/data-storage-hybrid')
 
-  // 如果没有用户配置，则使用默认配置
-  return {
-    apiKey: apiKey || 'xhs_ece2ac77bf86495442d51095ac9ffcc1',
-    apiBase: apiBase
+    // 使用提供的用户ID或默认用户ID
+    const targetUserId = userId || 'user_1'
+
+    console.log('🔍 [微信发布API] 获取用户配置:', { userId: targetUserId })
+
+    // 获取用户配置
+    const configs = await HybridUserConfigStorage.getUserConfigs(targetUserId)
+
+    console.log('📋 [微信发布API] 获取到的配置数量:', configs.length)
+
+    // 查找微信发布配置
+    const wechatPublishConfig = configs.find(config =>
+      config.provider === 'wechat_publish' ||
+      config.name?.includes('微信发布') ||
+      config.name?.includes('微信公众号发布')
+    )
+
+    console.log('🔍 [微信发布API] 查找到的微信发布配置:', {
+      found: !!wechatPublishConfig,
+      provider: wechatPublishConfig?.provider,
+      name: wechatPublishConfig?.name,
+      hasApiKey: !!wechatPublishConfig?.apiKey,
+      isConfigured: wechatPublishConfig?.isConfigured
+    })
+
+    if (!wechatPublishConfig || !wechatPublishConfig.apiKey) {
+      // 如果没有找到配置，使用默认配置（向后兼容）
+      console.log('⚠️ [微信发布API] 未找到用户配置，使用默认配置')
+      return {
+        apiKey: 'xhs_ece2ac77bf86495442d51095ac9ffcc1',
+        apiBase: 'https://wx.limyai.com/api/openapi'
+      }
+    }
+
+    return {
+      apiKey: wechatPublishConfig.apiKey,
+      apiBase: wechatPublishConfig.apiBase || 'https://wx.limyai.com/api/openapi'
+    }
+  } catch (error) {
+    console.error('❌ [微信发布API] 获取配置失败:', error)
+    // 出错时使用默认配置
+    return {
+      apiKey: 'xhs_ece2ac77bf86495442d51095ac9ffcc1',
+      apiBase: 'https://wx.limyai.com/api/openapi'
+    }
   }
 }
 
 /**
  * 获取公众号列表
+ * @param userId 用户ID，可选
  * @returns Promise<WechatAccount[]>
  */
-export async function getWechatAccounts(): Promise<WechatAccount[]> {
-  const config = getWechatPublishConfig()
+export async function getWechatAccounts(userId?: string): Promise<WechatAccount[]> {
+  const config = await getWechatPublishConfig(userId)
 
   try {
+    console.log('📡 [微信发布API] 获取公众号列表...', {
+      apiBase: config.apiBase,
+      userId: userId || 'default'
+    })
+
     const response = await fetch(`${config.apiBase}/wechat-accounts`, {
       method: 'POST',
       headers: {
@@ -48,9 +96,14 @@ export async function getWechatAccounts(): Promise<WechatAccount[]> {
       throw new Error('获取公众号列表失败')
     }
 
+    console.log('✅ [微信发布API] 获取公众号列表成功:', {
+      count: data.data.accounts.length,
+      userId: userId || 'default'
+    })
+
     return data.data.accounts
   } catch (error) {
-    console.error('获取公众号列表失败:', error)
+    console.error('❌ [微信发布API] 获取公众号列表失败:', error)
     throw error
   }
 }
@@ -58,12 +111,20 @@ export async function getWechatAccounts(): Promise<WechatAccount[]> {
 /**
  * 发布文章到公众号
  * @param params 发布参数
+ * @param userId 用户ID，可选
  * @returns Promise<PublishResult>
  */
-export async function publishToWechat(params: PublishParams): Promise<PublishResult> {
-  const config = getWechatPublishConfig()
+export async function publishToWechat(params: PublishParams, userId?: string): Promise<PublishResult> {
+  const config = await getWechatPublishConfig(userId)
 
   try {
+    console.log('📤 [微信发布API] 开始发布文章...', {
+      draftId: params.draftId,
+      wechatAppid: params.wechatAppid,
+      articleType: params.articleType,
+      userId: userId || 'default'
+    })
+
     const response = await fetch(`${config.apiBase}/wechat-publish`, {
       method: 'POST',
       headers: {
@@ -87,9 +148,15 @@ export async function publishToWechat(params: PublishParams): Promise<PublishRes
       throw new Error('发布响应数据异常')
     }
 
+    console.log('✅ [微信发布API] 文章发布成功:', {
+      publicationId: data.data.publicationId,
+      status: data.data.status,
+      userId: userId || 'default'
+    })
+
     return data.data
   } catch (error) {
-    console.error('发布文章失败:', error)
+    console.error('❌ [微信发布API] 发布文章失败:', error)
     throw error
   }
 }
@@ -97,10 +164,11 @@ export async function publishToWechat(params: PublishParams): Promise<PublishRes
 /**
  * 获取发布状态（轮询用）
  * @param publicationId 发布ID
+ * @param userId 用户ID，可选
  * @returns Promise<PublishResult>
  */
-export async function getPublishStatus(publicationId: string): Promise<PublishResult> {
-  const config = getWechatPublishConfig()
+export async function getPublishStatus(publicationId: string, userId?: string): Promise<PublishResult> {
+  const config = await getWechatPublishConfig(userId)
 
   try {
     const response = await fetch(`${config.apiBase}/wechat-publish/status`, {

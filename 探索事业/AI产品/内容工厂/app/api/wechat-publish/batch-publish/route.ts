@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getWechatPublishConfig } from '@/lib/wechat-publish'
+import { getUserFromRequest } from '@/lib/user-auth'
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,8 +20,23 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
+    // 获取用户信息
+    const user = await getUserFromRequest(request)
+    if (!user) {
+      return NextResponse.json({
+        success: false,
+        error: '用户未登录，请先登录'
+      }, { status: 401 })
+    }
+
     // 获取微信发布配置
-    const wechatConfig = getWechatPublishConfig()
+    const wechatConfig = await getWechatPublishConfig(user.userId)
+    console.log('📋 [批量发布API] 获取到微信发布配置:', {
+      hasApiKey: !!wechatConfig.apiKey,
+      apiBase: wechatConfig.apiBase,
+      userId: user.userId
+    })
+
     if (!wechatConfig || !wechatConfig.apiKey || !wechatConfig.apiBase) {
       return NextResponse.json({
         success: false,
