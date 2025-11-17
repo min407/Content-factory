@@ -18,7 +18,6 @@ const DEFAULT_USERS: User[] = [
     id: 'user_1',
     email: 'admin@example.com',
     username: 'admin',
-    password: 'admin123', // 仅用于演示，生产环境应该使用哈希
     isActive: true,
     createdAt: new Date(),
     updatedAt: new Date()
