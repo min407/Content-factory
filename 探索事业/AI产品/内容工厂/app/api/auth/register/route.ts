@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { UserRegistration, User, AuthResponse, AuthErrorCode, VALIDATION_RULES } from '@/types/user'
-import { UserStorage, PasswordStorage, SessionStorage, initializeStorage } from '@/lib/data-storage'
+import { UserStorage, PasswordStorage, SessionStorage, initializeStorage } from '@/lib/vercel-data-storage'
 
 /**
  * 生成用户ID

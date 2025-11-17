@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { LoginFormData, User, UserSession, AuthResponse, AuthErrorCode, VALIDATION_RULES } from '@/types/user'
-import { UserStorage, PasswordStorage, SessionStorage, initializeStorage } from '@/lib/data-storage'
+import { UserStorage, PasswordStorage, SessionStorage, initializeStorage } from '@/lib/vercel-data-storage'
 
 /**
  * 生成会话令牌
