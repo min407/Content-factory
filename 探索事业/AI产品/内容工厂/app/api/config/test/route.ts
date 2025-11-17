@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { ApiConfigManager, ApiTestResult } from '@/lib/api-config'
+import { ApiConfigManager } from '@/lib/api-config'
+import type { ApiTestResult } from '@/types/api-config'
 
 /**
  * API连接测试路由

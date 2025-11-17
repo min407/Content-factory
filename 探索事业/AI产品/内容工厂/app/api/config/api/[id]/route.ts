@@ -11,10 +11,10 @@ let apiConfigs: any[] = []
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const configId = params.id
+    const { id: configId } = await params
 
     if (!configId) {
       return NextResponse.json(

@@ -12,6 +12,15 @@ const nextConfig = {
       },
     ],
   },
+  // 配置Turbopack
+  turbopack: {
+    rules: {
+      '*.svg': {
+        loaders: ['@svgr/webpack'],
+        as: '*.js',
+      },
+    },
+  },
 }
 
 module.exports = nextConfig

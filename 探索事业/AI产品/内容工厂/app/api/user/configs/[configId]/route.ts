@@ -28,7 +28,15 @@ async function getUserFromRequest(request: NextRequest): Promise<{ userId: strin
  */
 async function findUserConfig(userId: string, configId: string): Promise<UserApiConfig | null> {
   const configs = await UserConfigStorage.getUserConfigs(userId)
-  return configs.find(config => config.id === configId) || null
+  const config = configs.find(config => config.id === configId)
+  if (!config) return null
+
+  // 转换为UserApiConfig类型
+  return {
+    ...config,
+    userId,
+    createdAt: config.createdAt || new Date().toISOString()
+  }
 }
 
 /**
