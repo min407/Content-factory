@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { deepAnalyzeArticles, generateSmartTopicInsights } from '@/lib/ai-service'
-import { searchWeChatArticles } from '@/lib/wechat-api'
 import { getUserFromRequest } from '@/lib/user-auth'
 
 export async function POST(request: NextRequest) {
@@ -28,36 +27,46 @@ export async function POST(request: NextRequest) {
     console.log('👤 [AI分析API] 用户信息:', { userId: user.userId, email: user.email })
 
     try {
-      // 调用真实的微信搜索API获取文章数据
+      // 调用我们的搜索API获取文章数据
       console.log('📡 [AI分析API] 开始搜索微信文章...')
 
-      const searchResult = await searchWeChatArticles(
-        {
-          kw: keyword,
-          page: 1,
-          sort_type: 1, // 按时间排序
-          mode: 1,
-          period: 7 // 最近7天
-        },
-        user.userId
-      )
-
-      console.log('📊 [AI分析API] 搜索结果:', {
-        total: searchResult.total || 0,
-        count: searchResult.data?.length || 0
+      const searchResponse = await fetch(`${process.env.VERCEL === '1' ? 'https://' : 'http://localhost:3000'}/api/search-articles?keyword=${encodeURIComponent(keyword)}&limit=${count}&period=7`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        }
       })
 
-      // 转换微信API返回的数据格式为我们需要的格式
-      const articles = searchResult.data?.slice(0, count).map(article => ({
+      if (!searchResponse.ok) {
+        console.error('❌ [AI分析API] 搜索请求失败:', {
+          status: searchResponse.status,
+          statusText: searchResponse.statusText
+        })
+        throw new Error(`搜索请求失败: ${searchResponse.status} ${searchResponse.statusText}`)
+      }
+
+      const searchResult = await searchResponse.json()
+      console.log('📊 [AI分析API] 搜索结果:', {
+        success: searchResult.success,
+        total: searchResult.data?.total || 0,
+        count: searchResult.data?.articles?.length || 0
+      })
+
+      if (!searchResult.success) {
+        throw new Error(searchResult.error || '搜索失败')
+      }
+
+      // 转换搜索API返回的数据格式为我们需要的格式
+      const articles = searchResult.data.articles?.slice(0, count).map((article: any) => ({
         title: article.title || '无标题',
         content: article.content || article.digest || '无内容',
-        likes: parseInt(article.like_num || '0'),
-        reads: parseInt(article.read_num || article.visit_num || '0'),
+        likes: parseInt(article.likeCount || article.like_num || '0'),
+        reads: parseInt(article.readCount || article.read_num || article.visit_num || '0'),
         url: article.url || article.link || '#',
-        publishTime: article.update_time || article.create_time,
-        author: article.source || article.nickname || '未知作者',
-        cover: article.cover || '',
-        summary: article.digest || article.content?.substring(0, 200) + '...' || ''
+        publishTime: article.publishTime || article.update_time || article.create_time,
+        author: article.author || article.source || article.nickname || '未知作者',
+        cover: article.coverImage || article.cover || '',
+        summary: article.digest || article.summary || article.content?.substring(0, 200) + '...' || ''
       })) || []
 
       if (articles.length === 0) {
@@ -86,8 +95,8 @@ export async function POST(request: NextRequest) {
       const summaries = await deepAnalyzeArticles(articles)
 
       // 计算统计数据
-      const totalReads = articles.reduce((sum, a) => sum + (a.reads || 0), 0)
-      const totalLikes = articles.reduce((sum, a) => sum + (a.likes || 0), 0)
+      const totalReads = articles.reduce((sum: number, a: any) => sum + (a.reads || 0), 0)
+      const totalLikes = articles.reduce((sum: number, a: any) => sum + (a.likes || 0), 0)
 
       const stats = {
         totalArticles: articles.length,
@@ -111,7 +120,7 @@ export async function POST(request: NextRequest) {
         stats,
         analysisTime: Date.now(),
         searchKeyword: keyword,
-        searchTotal: searchResult.total || 0
+        searchTotal: searchResult.data?.total || 0
       }
 
       console.log('✅ [AI分析API] 分析完成')
