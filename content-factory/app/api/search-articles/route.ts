@@ -8,13 +8,14 @@ const WECHAT_SEARCH_API = {
 
 // GET - 根据选题关键词搜索相关文章
 export async function GET(request: NextRequest) {
-  try {
-    console.log('🔍 [搜索API] 开始搜索文章')
+  console.log('🔍 [搜索API] 开始搜索文章')
 
-    const { searchParams } = new URL(request.url)
-    const keyword = searchParams.get('keyword')
-    const period = parseInt(searchParams.get('period') || '7')
-    const limit = parseInt(searchParams.get('limit') || '10')
+  const { searchParams } = new URL(request.url)
+  const keyword = searchParams.get('keyword')
+  const period = parseInt(searchParams.get('period') || '7')
+  const limit = parseInt(searchParams.get('limit') || '10')
+
+  try {
 
     if (!keyword) {
       return NextResponse.json(
@@ -101,14 +102,14 @@ export async function GET(request: NextRequest) {
 
     // 如果搜索失败，也返回模拟数据
     console.log('⚠️ [搜索API] 搜索失败，返回模拟数据')
-    const mockData = generateMockSearchData(keyword, limit)
+    const mockData = generateMockSearchData(keyword || 'default', limit)
 
     return NextResponse.json({
       success: true,
       data: {
         articles: mockData,
         total: mockData.length,
-        keyword,
+        keyword: keyword || 'default',
         period: 7,
         platform: 'wechat'
       },
@@ -162,60 +163,4 @@ function generateMockSearchData(keyword: string, limit: number) {
   ]
 
   return mockArticles.slice(0, limit)
-}
-          // 过滤出与关键词相关的文章
-          const relatedArticles = articlesData.filter((article: any) => {
-            const title = (article.title || '').toLowerCase()
-            const summary = (article.summary || '').toLowerCase()
-            const searchLower = keyword.toLowerCase()
-
-            return title.includes(searchLower) ||
-                   summary.includes(searchLower) ||
-                   article.digest?.toLowerCase().includes(searchLower) ||
-                   article.content?.toLowerCase().includes(searchLower)
-          })
-
-          // 为每篇文章添加搜索信息
-          relatedArticles.forEach((article: any) => {
-            allArticles.push({
-              ...article,
-              searchKeyword: row.keyword,
-              searchTimestamp: row.timestamp,
-              searchId: row.id
-            })
-          })
-        }
-      } catch (error) {
-        console.error('解析文章数据失败:', error)
-      }
-    })
-
-    // 去重并按阅读量排序
-    const uniqueArticles = allArticles.filter((article, index, self) =>
-      index === self.findIndex((a) => a.title === article.title)
-    )
-
-    const sortedArticles = uniqueArticles.sort((a, b) => {
-      const readsA = parseInt(a.reads || '0')
-      const readsB = parseInt(b.reads || '0')
-      return readsB - readsA
-    })
-
-    return NextResponse.json({
-      success: true,
-      articles: sortedArticles.slice(0, limit), // 限制返回数量
-      total: sortedArticles.length,
-      keyword: keyword
-    })
-
-  } catch (error) {
-    console.error('搜索相关文章失败:', error)
-    return NextResponse.json(
-      {
-        error: '搜索相关文章失败',
-        details: error instanceof Error ? error.message : '未知错误'
-      },
-      { status: 500 }
-    )
-  }
 }
