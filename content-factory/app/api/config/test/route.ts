@@ -244,24 +244,62 @@ async function testWechatPublishAPI(config: any): Promise<ApiTestResult> {
   const startTime = Date.now()
 
   try {
-    // 使用正确的API endpoint
-    const apiBase = config.apiBase?.replace('/api/openapi', '') || 'https://wx.limyai.com'
-    const response = await fetch(`${apiBase}/api/openapi/wechat-accounts`, {
+    console.log('🔗 [微信发布测试] 开始测试:', {
+      apiBase: config.apiBase,
+      hasApiKey: !!config.apiKey
+    })
+
+    // 使用正确的API endpoint，支持多种可能的URL格式
+    let apiUrl = config.apiBase
+    if (!apiUrl.includes('wechat-accounts')) {
+      // 如果URL不包含具体endpoint，构建完整的URL
+      const baseUrl = config.apiBase?.replace('/api/openapi', '') || 'https://wx.limyai.com'
+      apiUrl = `${baseUrl}/api/openapi/wechat-accounts`
+    }
+
+    console.log('🔗 [微信发布测试] 请求URL:', apiUrl)
+
+    // 创建AbortController用于超时控制
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 10000) // 10秒超时
+
+    const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'X-API-Key': config.apiKey,
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (compatible; Content-Factory/1.0)'
+      },
+      body: JSON.stringify({}),
+      signal: controller.signal
     })
 
+    clearTimeout(timeoutId)
     const responseTime = Date.now() - startTime
+
+    console.log('🔗 [微信发布测试] 响应状态:', {
+      status: response.status,
+      statusText: response.statusText,
+      responseTime
+    })
 
     if (!response.ok) {
       const errorText = await response.text()
+      console.error('❌ [微信发布测试] API响应错误:', {
+        status: response.status,
+        statusText: response.statusText,
+        errorText: errorText.substring(0, 200)
+      })
       throw new Error(`HTTP ${response.status}: ${response.statusText}`)
     }
 
     const data = await response.json()
+    console.log('🔗 [微信发布测试] 响应数据:', {
+      success: data.success,
+      hasData: !!data.data,
+      accountsCount: data.data?.accounts?.length || 0
+    })
 
     if (data.success) {
       return {
@@ -270,18 +308,44 @@ async function testWechatPublishAPI(config: any): Promise<ApiTestResult> {
         responseTime,
         timestamp: new Date(),
         details: {
-          accountsCount: data.data?.accounts?.length || 0
+          accountsCount: data.data?.accounts?.length || 0,
+          apiUrl: apiUrl
         }
       }
     } else {
       throw new Error(data.error || 'API返回失败')
     }
   } catch (error) {
+    const responseTime = Date.now() - startTime
+    console.error('❌ [微信发布测试] 连接失败:', {
+      error: error instanceof Error ? error.message : error,
+      responseTime
+    })
+
+    let errorMessage = error instanceof Error ? error.message : '微信公众号发布API连接失败'
+
+    // 针对不同类型的错误提供更友好的错误信息
+    if (error instanceof Error) {
+      if (error.name === 'AbortError') {
+        errorMessage = '连接超时，请检查网络或API服务状态'
+      } else if (error.message.includes('fetch')) {
+        errorMessage = '网络连接失败，可能是CORS限制或API服务不可用'
+      } else if (error.message.includes('ECONNREFUSED')) {
+        errorMessage = 'API服务器连接被拒绝'
+      } else if (error.message.includes('ENOTFOUND')) {
+        errorMessage = 'API服务器域名无法解析'
+      }
+    }
+
     return {
       success: false,
-      message: error instanceof Error ? error.message : '微信公众号发布API连接失败',
-      responseTime: Date.now() - startTime,
-      timestamp: new Date()
+      message: errorMessage,
+      responseTime,
+      timestamp: new Date(),
+      details: {
+        originalError: error instanceof Error ? error.message : 'Unknown error',
+        apiUrl: config.apiBase
+      }
     }
   }
 }

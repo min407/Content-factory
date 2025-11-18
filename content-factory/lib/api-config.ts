@@ -443,16 +443,19 @@ export class ApiConfigManager {
     const startTime = Date.now()
 
     try {
-      const response = await fetch(`${config.apiBase}/chat/completions`, {
+      // 调用后端API测试接口，避免CORS问题
+      const response = await fetch('/api/config/test', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${config.apiKey}`,
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: config.model || 'anthropic/claude-3.5-sonnet',
-          messages: [{ role: 'user', content: 'Hello' }],
-          max_tokens: 10
+          provider: 'openrouter',
+          config: {
+            apiKey: config.apiKey,
+            apiBase: config.apiBase,
+            model: config.model
+          }
         })
       })
 
@@ -461,17 +464,17 @@ export class ApiConfigManager {
       if (response.ok) {
         const data = await response.json()
         return {
-          success: true,
-          message: '连接成功',
-          responseTime,
-          details: data,
-          timestamp: new Date()
+          success: data.success,
+          message: data.message,
+          responseTime: data.responseTime || responseTime,
+          details: data.details,
+          timestamp: new Date(data.timestamp)
         }
       } else {
-        const error = await response.json().catch(() => ({}))
+        const errorText = await response.text()
         return {
           success: false,
-          message: `API错误 (${response.status}): ${error.error?.message || response.statusText}`,
+          message: `测试API错误 (${response.status}): ${response.statusText}`,
           responseTime,
           timestamp: new Date()
         }
@@ -494,23 +497,19 @@ export class ApiConfigManager {
     const startTime = Date.now()
 
     try {
-      // 检查apiBase是否已经包含完整路径，避免重复拼接
-      let apiUrl = config.apiBase || ''
-      if (!apiUrl.includes('/images/generations')) {
-        apiUrl = `${config.apiBase}/images/generations`
-      }
-
-      const response = await fetch(apiUrl, {
+      // 调用后端API测试接口，避免CORS问题
+      const response = await fetch('/api/config/test', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${config.apiKey}`,
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: config.model || 'Kwai-Kolors/Kolors',
-          prompt: 'test',
-          n: 1,
-          size: '1024x1024'
+          provider: 'siliconflow',
+          config: {
+            apiKey: config.apiKey,
+            apiBase: config.apiBase,
+            model: config.model
+          }
         })
       })
 
@@ -519,17 +518,17 @@ export class ApiConfigManager {
       if (response.ok) {
         const data = await response.json()
         return {
-          success: true,
-          message: '连接成功',
-          responseTime,
-          details: data,
-          timestamp: new Date()
+          success: data.success,
+          message: data.message,
+          responseTime: data.responseTime || responseTime,
+          details: data.details,
+          timestamp: new Date(data.timestamp)
         }
       } else {
-        const error = await response.json().catch(() => ({}))
+        const errorText = await response.text()
         return {
           success: false,
-          message: `API错误 (${response.status}): ${error.error?.message || response.statusText}`,
+          message: `测试API错误 (${response.status}): ${response.statusText}`,
           responseTime,
           timestamp: new Date()
         }
@@ -733,57 +732,51 @@ export class ApiConfigManager {
         }
       }
 
-      // 使用正确的API地址
-      const apiBase = config.apiBase || 'https://wx.limyai.com/api/openapi'
-
       console.log('🔍 [API配置] 微信公众号发布测试配置:', {
         hasApiKey: !!config.apiKey,
         apiKeyLength: config.apiKey.length,
-        apiBase: apiBase
+        apiBase: config.apiBase
       })
 
-      const response = await fetch(`${apiBase}/wechat-accounts`, {
+      // 调用后端API测试接口，避免CORS问题
+      const response = await fetch('/api/config/test', {
         method: 'POST',
         headers: {
-          'X-API-Key': config.apiKey,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({})
+        body: JSON.stringify({
+          provider: 'wechat_publish',
+          config: {
+            apiKey: config.apiKey,
+            apiBase: config.apiBase || 'https://wx.limyai.com/api/openapi'
+          }
+        })
       })
 
       const responseTime = Date.now() - startTime
-      console.log('🌐 [API配置] 微信公众号发布API响应状态:', response.status)
+      console.log('🌐 [API配置] 微信公众号发布测试API响应状态:', response.status)
 
       if (response.ok) {
         const data = await response.json()
-        console.log('📊 [API配置] 微信公众号发布API响应数据:', data)
+        console.log('📊 [API配置] 微信公众号发布测试API响应数据:', data)
 
-        if (data.success === true || data.code === 'success') {
-          return {
-            success: true,
-            message: '连接成功',
-            responseTime,
-            details: data,
-            timestamp: new Date()
-          }
-        } else {
-          return {
-            success: false,
-            message: `API错误: ${data.error || data.message || '未知错误'}`,
-            responseTime,
-            timestamp: new Date()
-          }
+        return {
+          success: data.success,
+          message: data.message,
+          responseTime: data.responseTime || responseTime,
+          details: data.details,
+          timestamp: new Date(data.timestamp)
         }
       } else {
         const errorText = await response.text()
-        console.error('❌ [API配置] 微信公众号发布API错误:', {
+        console.error('❌ [API配置] 微信公众号发布测试API错误:', {
           status: response.status,
           statusText: response.statusText,
           errorText: errorText
         })
         return {
           success: false,
-          message: `HTTP错误 (${response.status}): ${response.statusText}`,
+          message: `测试API错误 (${response.status}): ${response.statusText}`,
           responseTime,
           timestamp: new Date()
         }
@@ -791,9 +784,17 @@ export class ApiConfigManager {
     } catch (error) {
       const responseTime = Date.now() - startTime
       console.error('❌ [API配置] 微信公众号发布连接测试异常:', error)
+
+      let errorMessage = error instanceof Error ? error.message : '网络连接失败'
+
+      // 针对fetch错误提供更友好的错误信息
+      if (error instanceof Error && error.message.includes('fetch')) {
+        errorMessage = '网络连接失败，请检查网络连接或API服务状态'
+      }
+
       return {
         success: false,
-        message: error instanceof Error ? error.message : '网络连接失败',
+        message: errorMessage,
         responseTime,
         timestamp: new Date()
       }
