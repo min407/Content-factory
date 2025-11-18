@@ -241,6 +241,11 @@ export class UserConfigStorage {
    * 获取用户API配置
    */
   static async getUserConfigs(userId: string): Promise<ApiConfig[]> {
+    // 如果用户配置不存在，确保初始化默认配置
+    if (!memoryUserConfigs[userId]) {
+      console.log(`🔧 用户 ${userId} 配置不存在，初始化默认配置`)
+      ensureDefaultApiConfigs()
+    }
     return memoryUserConfigs[userId] || []
   }
 
