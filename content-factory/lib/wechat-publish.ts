@@ -46,7 +46,7 @@ export async function getWechatPublishConfig(userId?: string): Promise<{ apiKey:
       console.log('⚠️ [微信发布API] 未找到用户配置，使用默认配置')
       return {
         apiKey: 'xhs_ece2ac77bf86495442d51095ac9ffcc1',
-        apiBase: 'https://wx.limyai.com/api/openapi'
+        apiBase: 'https://wx.limyai.com'
       }
     }
 
@@ -59,7 +59,7 @@ export async function getWechatPublishConfig(userId?: string): Promise<{ apiKey:
     // 出错时使用默认配置
     return {
       apiKey: 'xhs_ece2ac77bf86495442d51095ac9ffcc1',
-      apiBase: 'https://wx.limyai.com/api/openapi'
+      apiBase: 'https://wx.limyai.com'
     }
   }
 }
