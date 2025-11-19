@@ -47,6 +47,32 @@ export class ApiConfigManager {
   }
 
   /**
+   * 标准化API配置，验证和纠正URL
+   */
+  private static normalizeApiConfig(config: ApiConfig): ApiConfig {
+    const normalizedConfig = { ...config }
+
+    if (config.provider === 'siliconflow' && config.apiBase) {
+      // 如果用户配置了图片生成的URL，自动纠正为聊天API的基础URL
+      if (config.apiBase.includes('/images/generations')) {
+        normalizedConfig.apiBase = config.apiBase.replace('/images/generations', '')
+        console.log('🔧 [API配置] 自动纠正SiliconFlow URL:', {
+          原始: config.apiBase,
+          纠正后: normalizedConfig.apiBase
+        })
+      }
+      // 如果只有基础的URL，确保没有多余的路径
+      else if (config.apiBase.endsWith('/v1')) {
+        normalizedConfig.apiBase = config.apiBase
+      } else if (config.apiBase.endsWith('/v1/')) {
+        normalizedConfig.apiBase = config.apiBase.slice(0, -1)
+      }
+    }
+
+    return normalizedConfig
+  }
+
+  /**
    * 保存API配置
    */
   static saveConfig(config: ApiConfig): boolean {
@@ -55,17 +81,20 @@ export class ApiConfigManager {
         return false // 服务器端无法保存到localStorage
       }
 
+      // 验证和纠正API Base URL
+      const normalizedConfig = this.normalizeApiConfig(config)
+
       const configs = this.getConfigs()
       const existingIndex = configs.findIndex(c => c.provider === config.provider)
 
       if (existingIndex >= 0) {
-        configs[existingIndex] = { ...config, updatedAt: new Date() }
+        configs[existingIndex] = { ...normalizedConfig, updatedAt: new Date() }
       } else {
-        configs.push(config)
+        configs.push(normalizedConfig)
       }
 
       localStorage.setItem(this.STORAGE_KEY, JSON.stringify(configs))
-      console.log('API配置保存成功:', config.provider)
+      console.log('API配置保存成功:', normalizedConfig.provider)
       return true
     } catch (error) {
       console.error('保存API配置失败:', error)
