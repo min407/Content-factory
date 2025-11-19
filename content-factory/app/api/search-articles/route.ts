@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 // 微信公众号搜索API配置
 const WECHAT_SEARCH_API = {
   url: 'https://www.dajiala.com/fbmain/monitor/v3/kw_search',
-  apiKey: 'JZL134dc4c7b7886079'
+  apiKey: process.env.NEXT_PUBLIC_XIAOHONGSHU_SEARCH_API_KEY || 'JZL134dc4c7b7886079'
 }
 
 // GET - 根据选题关键词搜索相关文章
