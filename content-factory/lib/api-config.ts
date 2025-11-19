@@ -351,7 +351,7 @@ export class ApiConfigManager {
             description: template.description,
             apiKey: apiKey,
             apiBase: apiBase || migration.defaultBase || '',
-            model: model || migration.defaultModel || null,
+            model: model || migration.defaultModel || '',
             isActive: true,
             isConfigured: !!apiKey,
             createdAt: new Date(),
