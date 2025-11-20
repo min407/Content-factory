@@ -1,0 +1,58 @@
+{
+  "user_1763646623727_e2mrr112d": [
+    {
+      "id": "1763351837785",
+      "provider": "openrouter",
+      "name": "OpenRouter",
+      "apiKey": "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",
+      "apiBase": "https://openrouter.ai/api/v1",
+      "model": "openai/gpt-4o",
+      "lastTested": "2025-11-20T13:50:51.317Z",
+      "testStatus": "success",
+      "testMessage": "连接成功",
+      "updatedAt": "2025-11-20T13:50:51.337Z",
+      "isConfigured": true,
+      "isActive": true
+    },
+    {
+      "id": "1763646664034",
+      "provider": "siliconflow",
+      "name": "Silicon Flow",
+      "apiKey": "sk-vikxdjnhqciuhqevdvpvirsccidnkpckrehyuupklsxsihup",
+      "apiBase": "https://api.siliconflow.cn/v1",
+      "model": "Kwai-Kolors/Kolors",
+      "lastTested": "2025-11-20T13:51:14.598Z",
+      "testStatus": "success",
+      "testMessage": "连接成功",
+      "updatedAt": "2025-11-20T13:51:14.625Z",
+      "isConfigured": true,
+      "isActive": true
+    },
+    {
+      "id": "1763646683868",
+      "provider": "wechat_search",
+      "name": "微信公众号搜索",
+      "apiKey": "JZL134dc4c7b7886079",
+      "apiBase": "https://www.dajiala.com/fbmain/monitor/v3/kw_search",
+      "lastTested": "2025-11-20T13:51:57.094Z",
+      "testStatus": "success",
+      "testMessage": "连接成功",
+      "updatedAt": "2025-11-20T13:51:57.104Z",
+      "isConfigured": true,
+      "isActive": true
+    },
+    {
+      "id": "1763646723354",
+      "provider": "wechat_publish",
+      "name": "微信公众号发布",
+      "apiKey": "xhs_ece2ac77bf86495442d51095ac9ffcc1",
+      "apiBase": "https://wx.limyai.com/api/openapi",
+      "lastTested": "2025-11-20T13:52:11.172Z",
+      "testStatus": "success",
+      "testMessage": "连接成功",
+      "updatedAt": "2025-11-20T13:52:11.188Z",
+      "isConfigured": true,
+      "isActive": true
+    }
+  ]
+}
